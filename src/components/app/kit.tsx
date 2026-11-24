@@ -33,6 +33,50 @@ export function notifySiteChanged() {
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(SITE_CHANGED_EVENT))
 }
 
+// ─── پیکربندی صفحه ورود (تنظیم از پنل مدیریت → تب «صفحه ورود») ───
+
+export type LoginMediaKind = 'none' | 'image' | 'video'
+export type LoginTextTone = 'auto' | 'light' | 'dark'
+
+// ستون معرفی (سمت راست در RTL) — نوشته‌ها، توضیحات و پس‌زمینه تصویری/ویدیویی
+export type LoginSideConfig = {
+  bgKind: LoginMediaKind
+  bgUrl: string | null
+  overlay: number // تاریکی روی پس‌زمینه ۰ تا ۸۰ درصد
+  title: string
+  subtitle: string
+  items: string[] // بندهای توضیحات
+  footer: string
+  textTone: LoginTextTone
+}
+
+// ستون فرم ورود (سمت چپ در RTL) — پس‌زمینه، رنگ/شفافیت/محو بودن کارت و نوشته‌های بالا و پایین فرم
+export type LoginFormConfig = {
+  bgKind: LoginMediaKind
+  bgUrl: string | null
+  color: string // رنگ کارت فرم — HEX
+  transparency: number // ۰ تا ۱۰۰ درصد
+  blur: number // محو بودن پشت کارت ۰ تا ۲۴ پیکسل
+  title: string // نوشته بالای فرم
+  subtitle: string // نوشته زیر عنوان فرم
+  footer: string // نوشته پایین فرم
+  textTone: LoginTextTone
+  showDemo: boolean // نمایش کادر حساب‌های نمایشی
+}
+
+export type LoginConfig = { side: LoginSideConfig; form: LoginFormConfig }
+
+// تبدیل HEX به rgba با شفافیت درصدی — برای کارت فرم
+export function hexToRgba(hex: string, transparencyPercent: number): string {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex)
+  if (!m) return hex
+  const n = parseInt(m[1], 16)
+  const r = (n >> 16) & 0xff
+  const g = (n >> 8) & 0xff
+  const b = n & 0xff
+  return `rgba(${r}, ${g}, ${b}, ${(1 - transparencyPercent / 100).toFixed(3)})`
+}
+
 export class ApiClientError extends Error {
   code: string
   details?: unknown

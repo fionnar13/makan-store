@@ -1,8 +1,10 @@
 'use client'
-// ورود به سامانه — شماره موبایل + رمز عبور (نشست امن HttpOnly) و ورود با گوگل (در صورت فعال‌سازی مدیر)
+// ورود به سامانه — دو ستونِ کاملاً قابل سفارشی‌سازی از پنل مدیریت (تب «صفحه ورود»):
+//  • ستون راست (معرفی): نوشته‌ها و توضیحات + پس‌زمینه تصویر یا ویدیو + درصد تاریکی و رنگ متن
+//  • ستون چپ (فرم): پس‌زمینه تصویر یا ویدیو + رنگ/شفافیت/محو بودن کارت + نوشته‌های بالا و پایین فرم
 import { useEffect, useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
-import { apiFetch, LogoImg, type SiteIdentity } from './kit'
+import { apiFetch, LogoImg, hexToRgba, type SiteIdentity, type LoginConfig, type LoginSideConfig, type LoginFormConfig } from './kit'
 import type { SessionUserLike } from './types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,6 +23,60 @@ function GoogleG({ size = 18 }: { size?: number }) {
   )
 }
 
+// پیکربندی پیش‌فرض سمت کلاینت — وقتی API تنظیمات در دسترس نبود؛ مطابق پیش‌فرض‌های سرور
+function fallbackSide(siteName: string, siteSlogan: string): LoginSideConfig {
+  return {
+    bgKind: 'none',
+    bgUrl: null,
+    overlay: 45,
+    title: siteName,
+    subtitle: siteSlogan,
+    items: [
+      'سفارش‌گیری ویزیتورها با رزرو اتمیک موجودی و جلوگیری از فروش بیش از موجودی',
+      'موتور قیمت‌گذاری سمت سرور با قیمت اختصاصی مشتری، گروه و منطقه',
+      'مدیریت بچ‌ها و تاریخ انقضا با سیاست FEFO',
+      'دفتر مالی مشتریان، تأمین‌کنندگان و اسناد اصلاحی',
+      'داشبورد مدیریتی و گزارش‌های فروش، انبار و وصول مطالبات',
+    ],
+    footer: 'این نسخه با داده‌های نمایشی (DEMO_SEED) راه‌اندازی شده است.',
+    textTone: 'auto',
+  }
+}
+
+function fallbackForm(siteName: string): LoginFormConfig {
+  return {
+    bgKind: 'none',
+    bgUrl: null,
+    color: '#ffffff',
+    transparency: 0,
+    blur: 0,
+    title: `ورود به ${siteName}`,
+    subtitle: 'با شماره موبایل و رمز عبور خود وارد شوید',
+    footer: '',
+    textTone: 'auto',
+    showDemo: true,
+  }
+}
+
+// پس‌زمینه تصویر یا ویدیوی تمام‌صفحه یک ستون
+function SideMedia({ kind, url }: { kind: 'image' | 'video'; url: string }) {
+  if (kind === 'image') {
+    return <img src={url} alt="" aria-hidden className="absolute inset-0 h-full w-full object-cover" />
+  }
+  return (
+    <video
+      src={url}
+      autoPlay
+      muted
+      loop
+      playsInline
+      preload="auto"
+      aria-hidden
+      className="absolute inset-0 h-full w-full object-cover"
+    />
+  )
+}
+
 export default function Login({ onSuccess, authError, onRetry, site }: {
   onSuccess: (u: SessionUserLike) => void
   authError?: string | null
@@ -35,6 +91,8 @@ export default function Login({ onSuccess, authError, onRetry, site }: {
   // وضعیت ورود با گوگل — فقط وقتی مدیر فعال کرده و شناسه/رمز تنظیم شده دکمه نشان داده می‌شود
   const [googleAvailable, setGoogleAvailable] = useState(false)
   const [googleError, setGoogleError] = useState<string | null>(null)
+  // پیکربندی صفحه ورود از پنل مدیریت — تا زمان پاسخ سرور، پیش‌فرض‌ها نمایش داده می‌شوند
+  const [cfg, setCfg] = useState<LoginConfig | null>(null)
 
   // خطای بازگشت از گوگل — ?googleError=... از ریدایرکت callback
   useEffect(() => {
@@ -51,6 +109,15 @@ export default function Login({ onSuccess, authError, onRetry, site }: {
       .then(s => setGoogleAvailable(s.enabled && s.configured))
       .catch(() => setGoogleAvailable(false))
   }, [])
+
+  useEffect(() => {
+    apiFetch<LoginConfig>('/api/login-settings')
+      .then(setCfg)
+      .catch(() => setCfg(null))
+  }, [])
+
+  const side = cfg?.side ?? fallbackSide(siteName, siteSlogan)
+  const form = cfg?.form ?? fallbackForm(siteName)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -86,115 +153,172 @@ export default function Login({ onSuccess, authError, onRetry, site }: {
     setPassword(pass)
   }
 
-  return (
-    <div className="min-h-screen grid lg:grid-cols-2 bg-stone-100">
-      {/* معرفی */}
-      <div className="hidden lg:flex flex-col justify-center gap-6 bg-sidebar text-sidebar-foreground px-12">
-        <div className="flex items-center gap-3">
-          <LogoImg
-            src={site?.logoUrl}
-            alt={siteName}
-            className="h-12 w-12 rounded-xl object-cover"
-            fallback={<span className="grid place-items-center h-12 w-12 rounded-xl bg-primary text-primary-foreground text-2xl font-black">ب</span>}
-          />
-          <div>
-            <h1 className="text-2xl font-black">{siteName}</h1>
-            <p className="text-sm text-sidebar-foreground/60">{siteSlogan}</p>
-          </div>
-        </div>
-        <ul className="grid gap-3 text-sm text-sidebar-foreground/80">
-          <li>• سفارش‌گیری ویزیتورها با رزرو اتمیک موجودی و جلوگیری از فروش بیش از موجودی</li>
-          <li>• موتور قیمت‌گذاری سمت سرور با قیمت اختصاصی مشتری، گروه و منطقه</li>
-          <li>• مدیریت بچ‌ها و تاریخ انقضا با سیاست FEFO</li>
-          <li>• دفتر مالی مشتریان، تأمین‌کنندگان و اسناد اصلاحی</li>
-          <li>• داشبورد مدیریتی و گزارش‌های فروش، انبار و وصول مطالبات</li>
-        </ul>
-        <p className="text-xs text-sidebar-foreground/40">این نسخه با داده‌های نمایشی (DEMO_SEED) راه‌اندازی شده است.</p>
-      </div>
+  // ── رنگ متن هر ستون بر اساس تنظیم مدیر ──
+  // auto: روی پس‌زمینه تصویری/ویدیویی متن روشن، در غیر این صورت رنگ قالب
+  const sideLight = side.textTone === 'light' || (side.textTone === 'auto' && side.bgKind !== 'none')
+  const formLight = form.textTone === 'light' || (form.textTone === 'auto' && form.bgKind !== 'none')
 
-      {/* فرم ورود */}
-      <div className="flex items-center justify-center p-6">
-        <form onSubmit={submit} className="w-full max-w-sm rounded-2xl bg-card border shadow-sm p-6 grid gap-4">
-          <div className="text-center">
-            <div className="lg:hidden mb-2">
+  // کارت فرم — رنگ، شفافیت و محو بودن تنظیم‌شده توسط مدیر
+  const cardStyle: React.CSSProperties = {
+    backgroundColor: hexToRgba(form.color, form.transparency),
+    backdropFilter: form.blur > 0 ? `blur(${form.blur}px)` : undefined,
+    WebkitBackdropFilter: form.blur > 0 ? `blur(${form.blur}px)` : undefined,
+  }
+
+  return (
+    <div className="h-dvh overflow-hidden flex bg-stone-100">
+      {/* ── ستون معرفی (سمت راست) — نوشته‌ها و توضیحات با پس‌زمینه قابل سفارشی‌سازی ── */}
+      <section
+        className={`hidden lg:block relative w-1/2 overflow-hidden ${
+          side.bgKind === 'none' ? 'bg-sidebar text-sidebar-foreground' : 'bg-stone-900'
+        }`}
+      >
+        {(side.bgKind === 'image' || side.bgKind === 'video') && side.bgUrl && (
+          <SideMedia kind={side.bgKind} url={side.bgUrl} />
+        )}
+        {/* لایه تاریکی تنظیم‌شده برای خوانایی متن روی پس‌زمینه */}
+        {side.bgKind !== 'none' && (
+          <div className="absolute inset-0" style={{ backgroundColor: `rgba(10, 14, 20, ${(side.overlay / 100).toFixed(2)})` }} aria-hidden />
+        )}
+
+        <div className="absolute inset-0 overflow-y-auto scrollbar-none">
+          <div className={`min-h-full flex flex-col justify-center gap-6 px-10 xl:px-12 py-10 ${sideLight ? 'text-white' : 'text-sidebar-foreground'}`}>
+            <div className="flex items-center gap-3">
               <LogoImg
                 src={site?.logoUrl}
                 alt={siteName}
-                className="h-11 w-11 mx-auto rounded-xl object-cover"
-                fallback={<span className="grid place-items-center h-11 w-11 mx-auto rounded-xl bg-primary text-primary-foreground text-xl font-black">ب</span>}
+                className="h-12 w-12 rounded-xl object-cover"
+                fallback={<span className="grid place-items-center h-12 w-12 rounded-xl bg-primary text-primary-foreground text-2xl font-black">ب</span>}
               />
-            </div>
-            <h2 className="text-lg font-bold">ورود به {siteName}</h2>
-            <p className="text-xs text-muted-foreground mt-1">با شماره موبایل و رمز عبور خود وارد شوید</p>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="phone">شماره موبایل</Label>
-            <Input
-              id="phone" dir="ltr" inputMode="numeric" placeholder="09xxxxxxxxx"
-              value={phone} onChange={e => setPhone(e.target.value)} required
-              autoComplete="username"
-            />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="password">رمز عبور</Label>
-            <Input
-              id="password" type="password" dir="ltr" placeholder="••••••••"
-              value={password} onChange={e => setPassword(e.target.value)} required
-              autoComplete="current-password"
-            />
-          </div>
-          {authError && (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 grid gap-2" role="alert">
-              <div className="flex items-start gap-2 text-xs text-amber-900">
-                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
-                <span>{authError}</span>
+              <div className="min-w-0">
+                {side.title && <h1 className="text-2xl font-black">{side.title}</h1>}
+                {side.subtitle && <p className={`text-sm mt-0.5 ${sideLight ? 'text-white/70' : 'text-sidebar-foreground/60'}`}>{side.subtitle}</p>}
               </div>
-              {onRetry && (
-                <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onRetry}>
-                  تلاش مجدد برای برقراری نشست
-                </Button>
+            </div>
+
+            {side.items.length > 0 && (
+              <ul className={`grid gap-3 text-sm ${sideLight ? 'text-white/85' : 'text-sidebar-foreground/80'}`}>
+                {side.items.map((it, i) => (
+                  <li key={i} className="flex items-start gap-2.5">
+                    <span aria-hidden className={`mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full ${sideLight ? 'bg-white/60' : 'bg-sidebar-foreground/40'}`} />
+                    <span>{it}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {side.footer && (
+              <p className={`text-xs ${sideLight ? 'text-white/50' : 'text-sidebar-foreground/40'}`}>{side.footer}</p>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ── ستون فرم ورود (سمت چپ) — کارت فرم با رنگ/شفافیت/محو بودن قابل تنظیم ── */}
+      <section className="relative flex-1 overflow-hidden bg-stone-100">
+        {(form.bgKind === 'image' || form.bgKind === 'video') && form.bgUrl && (
+          <SideMedia kind={form.bgKind} url={form.bgUrl} />
+        )}
+
+        <div className="absolute inset-0 overflow-y-auto scrollbar-none flex p-5 md:p-6">
+          <form
+            onSubmit={submit}
+            style={cardStyle}
+            className={`m-auto w-full max-w-sm rounded-2xl border shadow-sm p-6 grid gap-4 ${
+              formLight ? 'border-white/30 text-white' : 'bg-card text-card-foreground'
+            }`}
+          >
+            <div className="text-center">
+              <div className="lg:hidden mb-2">
+                <LogoImg
+                  src={site?.logoUrl}
+                  alt={siteName}
+                  className="h-11 w-11 mx-auto rounded-xl object-cover"
+                  fallback={<span className="grid place-items-center h-11 w-11 mx-auto rounded-xl bg-primary text-primary-foreground text-xl font-black">ب</span>}
+                />
+              </div>
+              {form.title && <h2 className="text-lg font-bold">{form.title}</h2>}
+              {form.subtitle && (
+                <p className={`text-xs mt-1 ${formLight ? 'text-white/70' : 'text-muted-foreground'}`}>{form.subtitle}</p>
               )}
             </div>
-          )}
-          <Button type="submit" disabled={busy} className="mt-1">
-            {busy ? 'در حال ورود…' : 'ورود'}
-          </Button>
-
-          {/* ورود با گوگل — فقط وقتی مدیر فعال و پیکربندی کرده باشد */}
-          {googleAvailable && (
-            <>
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                <span className="h-px flex-1 bg-stone-200" aria-hidden />
-                یا
-                <span className="h-px flex-1 bg-stone-200" aria-hidden />
-              </div>
-              <Button type="button" variant="outline" onClick={startGoogle} className="gap-2 bg-white">
-                <GoogleG /> ورود با گوگل
-              </Button>
-              <p className="text-[10px] text-muted-foreground text-center -mt-1">
-                ورود با گوگل در تب جدید انجام می‌شود؛ با اولین ورود، حساب با نقش «کاربر آنلاین» ساخته می‌شود
-              </p>
-            </>
-          )}
-
-          {googleError && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700" role="alert">
-              ورود با گوگل ناموفق بود: {googleError}
+            <div className="grid gap-1.5">
+              <Label htmlFor="phone" className={formLight ? 'text-white/90' : ''}>شماره موبایل</Label>
+              <Input
+                id="phone" dir="ltr" inputMode="numeric" placeholder="09xxxxxxxxx"
+                value={phone} onChange={e => setPhone(e.target.value)} required
+                autoComplete="username"
+              />
             </div>
-          )}
+            <div className="grid gap-1.5">
+              <Label htmlFor="password" className={formLight ? 'text-white/90' : ''}>رمز عبور</Label>
+              <Input
+                id="password" type="password" dir="ltr" placeholder="••••••••"
+                value={password} onChange={e => setPassword(e.target.value)} required
+                autoComplete="current-password"
+              />
+            </div>
+            {authError && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 grid gap-2" role="alert">
+                <div className="flex items-start gap-2 text-xs text-amber-900">
+                  <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
+                  <span>{authError}</span>
+                </div>
+                {onRetry && (
+                  <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onRetry}>
+                    تلاش مجدد برای برقراری نشست
+                  </Button>
+                )}
+              </div>
+            )}
+            <Button type="submit" disabled={busy} className="mt-1">
+              {busy ? 'در حال ورود…' : 'ورود'}
+            </Button>
 
-          <div className="rounded-lg bg-stone-50 border p-3 text-[11px] text-muted-foreground grid gap-1.5">
-            <span className="font-medium text-stone-600">حساب‌های نمایشی این محیط:</span>
-            <button type="button" className="text-right hover:underline" onClick={() => fill('09120000000', 'Admin#1404')}>
-              مدیر کل: <span dir="ltr">09120000000</span> — <span dir="ltr">Admin#1404</span>
-            </button>
-            <button type="button" className="text-right hover:underline" onClick={() => fill('09120000005', 'Demo#1404')}>
-              ویزیتور: <span dir="ltr">09120000005</span> — <span dir="ltr">Demo#1404</span>
-            </button>
-            <span>سایر نقش‌ها با همان رمز نمایشی (<span dir="ltr">Demo#1404</span>) از <span dir="ltr">09120000001</span> تا <span dir="ltr">09120000009</span></span>
-          </div>
-        </form>
-      </div>
+            {/* ورود با گوگل — فقط وقتی مدیر فعال و پیکربندی کرده باشد */}
+            {googleAvailable && (
+              <>
+                <div className={`flex items-center gap-3 text-[11px] ${formLight ? 'text-white/60' : 'text-muted-foreground'}`}>
+                  <span className={`h-px flex-1 ${formLight ? 'bg-white/30' : 'bg-stone-200'}`} aria-hidden />
+                  یا
+                  <span className={`h-px flex-1 ${formLight ? 'bg-white/30' : 'bg-stone-200'}`} aria-hidden />
+                </div>
+                <Button type="button" variant="outline" onClick={startGoogle} className="gap-2 bg-white text-stone-700 hover:bg-white">
+                  <GoogleG /> ورود با گوگل
+                </Button>
+                <p className={`text-[10px] text-center -mt-1 ${formLight ? 'text-white/60' : 'text-muted-foreground'}`}>
+                  ورود با گوگل در تب جدید انجام می‌شود؛ با اولین ورود، حساب با نقش «کاربر آنلاین» ساخته می‌شود
+                </p>
+              </>
+            )}
+
+            {googleError && (
+              <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700" role="alert">
+                ورود با گوگل ناموفق بود: {googleError}
+              </div>
+            )}
+
+            {form.showDemo && (
+              <div className={`rounded-lg border p-3 text-[11px] grid gap-1.5 ${
+                formLight ? 'border-white/25 bg-white/10 text-white/80' : 'bg-stone-50 text-muted-foreground'
+              }`}>
+                <span className={`font-medium ${formLight ? 'text-white' : 'text-stone-600'}`}>حساب‌های نمایشی این محیط:</span>
+                <button type="button" className="text-right hover:underline" onClick={() => fill('09120000000', 'Admin#1404')}>
+                  مدیر کل: <span dir="ltr">09120000000</span> — <span dir="ltr">Admin#1404</span>
+                </button>
+                <button type="button" className="text-right hover:underline" onClick={() => fill('09120000005', 'Demo#1404')}>
+                  ویزیتور: <span dir="ltr">09120000005</span> — <span dir="ltr">Demo#1404</span>
+                </button>
+                <span>سایر نقش‌ها با همان رمز نمایشی (<span dir="ltr">Demo#1404</span>) از <span dir="ltr">09120000001</span> تا <span dir="ltr">09120000009</span></span>
+              </div>
+            )}
+
+            {form.footer && (
+              <p className={`text-center text-xs ${formLight ? 'text-white/70' : 'text-muted-foreground'}`}>{form.footer}</p>
+            )}
+          </form>
+        </div>
+      </section>
     </div>
   )
 }

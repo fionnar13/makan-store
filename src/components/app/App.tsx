@@ -323,7 +323,8 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-stone-100">
+    // قاب ثابت صفحه — اسکرول هر منطقه (سایدبار/محتوا) مستقل است و نوار پیمایش در هیچ‌کدام دیده نمی‌شود
+    <div className="h-dvh overflow-hidden flex flex-col bg-stone-100">
       {/* هدر */}
       <header className="sticky top-0 z-40 h-14 bg-sidebar text-sidebar-foreground shadow-sm flex items-center gap-3 px-3 md:px-5">
         {/* منوی موبایل */}
@@ -333,7 +334,7 @@ export default function App() {
               <Menu className="h-5 w-5" />
             </button>
           </SheetTrigger>
-          <SheetContent side="right" className="bg-sidebar text-sidebar-foreground border-sidebar-border p-0 w-72">
+          <SheetContent side="right" className="bg-sidebar text-sidebar-foreground border-sidebar-border p-0 w-72 flex flex-col overflow-hidden scrollbar-none">
             <SheetTitle className="px-4 pt-5 text-lg font-bold">{site?.name ?? 'بنکداری هوشمند'}</SheetTitle>
             <SidebarNav user={user} nav={visibleNav} view={view} go={go} />
           </SheetContent>
@@ -451,13 +452,13 @@ export default function App() {
       </header>
 
       <div className="flex flex-1 min-h-0">
-        {/* سایدبار دسکتاپ */}
-        <aside className="hidden lg:flex flex-col w-60 shrink-0 bg-sidebar text-sidebar-foreground">
+        {/* سایدبار دسکتاپ — مستقل از محتوا؛ فقط خودش در صورت نیاز اسکرول نامرئی دارد */}
+        <aside className="hidden lg:flex flex-col w-60 shrink-0 bg-sidebar text-sidebar-foreground overflow-hidden">
           <SidebarNav user={user} nav={visibleNav} view={view} go={go} />
         </aside>
 
-        {/* محتوا */}
-        <main className="flex-1 min-w-0 overflow-y-auto">
+        {/* محتوا — اسکرول مستقل از سایدبار و بدون نوار پیمایش مرئی */}
+        <main className="flex-1 min-w-0 overflow-y-auto scrollbar-none">
           <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
             {renderView()}
             <footer className="mt-auto pt-8 pb-4 text-center text-xs text-stone-400">
@@ -525,7 +526,7 @@ export default function App() {
 
 function SidebarNav({ user, nav, view, go }: { user: SessionUser; nav: Array<{ group: string; items: NavItem[] }>; view: ViewKey; go: (v: ViewKey) => void }) {
   return (
-    <nav className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-5" aria-label="منوی اصلی">
+    <nav className="flex-1 overflow-y-auto scrollbar-none py-4 px-3 flex flex-col gap-5" aria-label="منوی اصلی">
       {nav.map(g => (
         <div key={g.group}>
           <div className="px-2 pb-1.5 text-[10px] font-bold text-sidebar-foreground/50 tracking-wide">{g.group}</div>

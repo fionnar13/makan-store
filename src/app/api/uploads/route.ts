@@ -5,7 +5,7 @@ import { db } from '@/lib/db'
 import { ApiError, handler, ok } from '@/lib/api'
 import { requireAuth, requirePerm } from '@/lib/auth'
 import { audit } from '@/lib/audit'
-import { saveUploadImage } from '@/lib/uploads'
+import { saveUploadImage, saveUploadMedia } from '@/lib/uploads'
 
 export async function POST(req: NextRequest) {
   return handler(async () => {
@@ -44,7 +44,19 @@ export async function POST(req: NextRequest) {
       return ok({ kind, url })
     }
 
-    throw new ApiError(400, 'BAD_KIND', 'نوع بارگذاری نامعتبر است (logo | favicon | banner | avatar)')
+    if (kind === 'login') {
+      // پس‌زمینه تصویری/ویدیویی صفحه ورود — فقط مدیر کل / آدمین
+      const user = await requirePerm(req, 'users.manage')
+      if (!(file instanceof File)) throw new ApiError(400, 'NO_FILE', 'فایل تصویر یا ویدیو ارسال نشده است')
+      const url = await saveUploadMedia(file, 'login')
+      await audit({
+        userId: user.id, action: 'site.loginMedia.upload', entityType: 'Setting', entityId: 'login.*',
+        after: { url, mimeType: file.type, size: file.size },
+      })
+      return ok({ kind, url })
+    }
+
+    throw new ApiError(400, 'BAD_KIND', 'نوع بارگذاری نامعتبر است (logo | favicon | banner | login | avatar)')
   })
 }
 

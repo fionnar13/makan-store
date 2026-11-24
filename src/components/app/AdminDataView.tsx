@@ -2,7 +2,7 @@
 // پنل مدیریت داده‌ها — مدیریت موجودیت‌های پایه دیتابیس
 // دسترسی: فقط مجوز users.manage (مدیر کل / آدمین)
 import { useEffect, useRef, useState } from 'react'
-import { apiFetch, apiUpload, useApiData, DataTable, JDate, PageHeader, Field, formatFaNumber, SiteIdentity, notifySiteChanged } from './kit'
+import { apiFetch, apiUpload, useApiData, DataTable, JDate, PageHeader, Field, formatFaNumber, SiteIdentity, notifySiteChanged, hexToRgba, type LoginConfig, type LoginMediaKind, type LoginSideConfig, type LoginFormConfig } from './kit'
 import type { SessionUserLike, ViewKeyLike } from './types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,7 +14,8 @@ import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tags, BadgeCheck, Warehouse, Users, Images, Settings2 } from 'lucide-react'
-import { Plus, RefreshCw, Lock, Pencil, Trash2, ArrowUpRight, ImagePlus, Globe, Loader2, LayoutPanelTop, ChevronUp, ChevronDown, KeyRound } from 'lucide-react'
+import { Plus, RefreshCw, Lock, Pencil, Trash2, ArrowUpRight, ImagePlus, Globe, Loader2, LayoutPanelTop, ChevronUp, ChevronDown, KeyRound, LogIn } from 'lucide-react'
+import { Slider } from '@/components/ui/slider'
 import { toast } from 'sonner'
 
 type TableStat = { key: string; label: string; count: number; hint: string; view: string | null }
@@ -50,6 +51,7 @@ export default function AdminDataView({ user, go }: { user: SessionUserLike; go:
           <TabsTrigger value="site" className="gap-1.5"><Globe className="h-3.5 w-3.5" /> وب‌سایت</TabsTrigger>
           <TabsTrigger value="banners" className="gap-1.5"><Images className="h-3.5 w-3.5" /> بنرهای فروشگاه</TabsTrigger>
           <TabsTrigger value="google" className="gap-1.5"><KeyRound className="h-3.5 w-3.5" /> ورود با گوگل</TabsTrigger>
+          <TabsTrigger value="login" className="gap-1.5"><LogIn className="h-3.5 w-3.5" /> صفحه ورود</TabsTrigger>
           <TabsTrigger value="settings" className="gap-1.5"><Settings2 className="h-3.5 w-3.5" /> تنظیمات</TabsTrigger>
         </TabsList>
 
@@ -68,6 +70,7 @@ export default function AdminDataView({ user, go }: { user: SessionUserLike; go:
         <TabsContent value="site" className="mt-4"><SiteSettingsTab /></TabsContent>
         <TabsContent value="banners" className="mt-4"><BannersTab /></TabsContent>
         <TabsContent value="google" className="mt-4"><GoogleLoginTab /></TabsContent>
+        <TabsContent value="login" className="mt-4"><LoginSettingsTab /></TabsContent>
         <TabsContent value="settings" className="mt-4"><SettingsTab /></TabsContent>
       </Tabs>
     </div>
@@ -1370,6 +1373,330 @@ function GoogleLoginTab() {
           <span className="font-bold text-stone-700">خروج از حساب:</span>{' '}
           روی آواتار در هدر → «خروج از حساب».
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── سفارشی‌سازی صفحه ورود (دو ستون قابل تنظیم) ───
+
+const LOGIN_MEDIA_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm'
+const LOGIN_SWATCHES = ['#ffffff', '#f5f5f4', '#ecfdf5', '#0f172a', '#14532d', '#7c2d12']
+
+// انتخابگر پس‌زمینه تصویری/ویدیویی یک ستون صفحه ورود — پیش‌نمایش + بارگذاری + حذف
+function LoginMediaPicker({ target, kind, url, uploading, onPick, onClear, overlay }: {
+  target: 'side' | 'form'
+  kind: LoginMediaKind
+  url: string | null
+  uploading: 'side' | 'form' | null
+  onPick: (target: 'side' | 'form', file: File) => void
+  onClear: (target: 'side' | 'form') => void
+  overlay?: number
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const has = kind !== 'none' && !!url
+  return (
+    <div className="grid gap-2">
+      <input
+        ref={inputRef}
+        type="file"
+        accept={LOGIN_MEDIA_ACCEPT}
+        className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) onPick(target, f); e.target.value = '' }}
+      />
+      <div className="relative rounded-lg border overflow-hidden aspect-[16/7] bg-stone-50">
+        {has && url ? (
+          kind === 'image' ? (
+            <img src={url} alt="پیش‌نمایش پس‌زمینه" className="absolute inset-0 h-full w-full object-cover" />
+          ) : (
+            <video src={url} muted loop autoPlay playsInline aria-hidden className="absolute inset-0 h-full w-full object-cover" />
+          )
+        ) : (
+          <div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">پس‌زمینه‌ای الصاق نشده — رنگ قالب پیش‌فرض</div>
+        )}
+        {has && overlay !== undefined && (
+          <div className="absolute inset-0" style={{ backgroundColor: `rgba(10, 14, 20, ${(overlay / 100).toFixed(2)})` }} aria-hidden />
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading !== null}>
+          {uploading === target ? <Loader2 className="h-4 w-4 ml-1 animate-spin" /> : <ImagePlus className="h-4 w-4 ml-1" />}
+          {has ? 'تغییر پس‌زمینه' : 'الصاق تصویر یا ویدیو'}
+        </Button>
+        {has && (
+          <>
+            <Button type="button" variant="ghost" size="sm" className="text-rose-600 hover:text-rose-700" onClick={() => onClear(target)} disabled={uploading !== null}>
+              <Trash2 className="h-4 w-4 ml-1" /> حذف
+            </Button>
+            <Badge variant="secondary" className="text-[10px]">{kind === 'video' ? 'ویدیو' : 'تصویر'}</Badge>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// انتخاب رنگ متن ستون — خودکار/روشن/تیره
+function TextToneSelect({ value, onChange }: { value: LoginSideConfig['textTone']; onChange: (v: LoginSideConfig['textTone']) => void }) {
+  return (
+    <Select value={value} onValueChange={v => onChange(v as LoginSideConfig['textTone'])}>
+      <SelectTrigger><SelectValue /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="auto">خودکار — روی پس‌زمینه روشن، بدون پس‌زمینه رنگ قالب</SelectItem>
+        <SelectItem value="light">روشن (سفید)</SelectItem>
+        <SelectItem value="dark">تیره</SelectItem>
+      </SelectContent>
+    </Select>
+  )
+}
+
+function LoginSettingsTab() {
+  const { data, loading, reload } = useApiData<LoginConfig>('/api/login-settings')
+  const [side, setSide] = useState<LoginSideConfig | null>(null)
+  const [form, setForm] = useState<LoginFormConfig | null>(null)
+  const [itemsText, setItemsText] = useState('')
+  const [uploading, setUploading] = useState<'side' | 'form' | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  // همگام‌سازی از سرور — هر بار پس از ذخیره هم به‌روز می‌شود
+  useEffect(() => {
+    if (data) {
+      setSide(data.side)
+      setForm(data.form)
+      setItemsText(data.side.items.join('\n'))
+    }
+  }, [data])
+
+  const upload = async (target: 'side' | 'form', file: File) => {
+    setUploading(target)
+    try {
+      const fd = new FormData()
+      fd.append('kind', 'login')
+      fd.append('file', file)
+      const res = await apiUpload<{ url: string }>('/api/uploads', fd)
+      const isVideo = file.type.startsWith('video/')
+      if (target === 'side') {
+        setSide(s => (s ? { ...s, bgKind: isVideo ? 'video' : 'image', bgUrl: res.url } : s))
+      } else {
+        setForm(f => (f ? { ...f, bgKind: isVideo ? 'video' : 'image', bgUrl: res.url } : f))
+      }
+      toast.success(isVideo ? 'ویدیوی پس‌زمینه بارگذاری شد' : 'تصویر پس‌زمینه بارگذاری شد')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'خطا در بارگذاری فایل')
+    } finally { setUploading(null) }
+  }
+
+  const clearMedia = (target: 'side' | 'form') => {
+    if (target === 'side') setSide(s => (s ? { ...s, bgKind: 'none', bgUrl: null } : s))
+    else setForm(f => (f ? { ...f, bgKind: 'none', bgUrl: null } : f))
+  }
+
+  const save = async () => {
+    if (!side || !form) return
+    if (!/^#[0-9a-fA-F]{6}$/.test(form.color)) {
+      toast.error('رنگ کارت فرم معتبر نیست؛ از انتخابگر رنگ استفاده کنید')
+      return
+    }
+    setBusy(true)
+    try {
+      await apiFetch('/api/login-settings', {
+        method: 'PUT',
+        body: JSON.stringify({
+          side: { ...side, items: itemsText.split('\n').map(x => x.trim()).filter(Boolean) },
+          form,
+        }),
+      })
+      toast.success('تنظیمات صفحه ورود ذخیره شد')
+      reload()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'خطا در ذخیره تنظیمات')
+    } finally { setBusy(false) }
+  }
+
+  const dirty = !!data && !!side && !!form && (
+    JSON.stringify({ ...side, items: itemsText.split('\n').map(x => x.trim()).filter(Boolean) }) !== JSON.stringify(data.side) ||
+    JSON.stringify(form) !== JSON.stringify(data.form)
+  )
+
+  if (loading && !data) {
+    return <p className="text-sm text-muted-foreground py-8 text-center">در حال بارگذاری…</p>
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground max-w-3xl leading-6">
+          صفحه ورود دو ستون دارد: <b>ستون راست</b> معرفی و توضیحات و <b>ستون چپ</b> فرم ورود.
+          برای هر ستون می‌توانید تصویر یا ویدیوی پس‌زمینه الصاق کنید، درصد تاریکی و رنگ متن را تنظیم کنید،
+          رنگ/شفافیت/محو بودن کارت فرم را تغییر دهید و همه نوشته‌های بالای فرم، پایین فرم و ستون مقابل را ویرایش کنید.
+        </p>
+        <Button size="sm" onClick={save} disabled={busy || !side || !form}>
+          {busy ? 'در حال ذخیره…' : dirty ? 'ذخیره تغییرات' : 'ذخیره'}
+        </Button>
+      </div>
+
+      {side && form && (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {/* ستون راست — معرفی و توضیحات */}
+          <div className="rounded-xl border bg-card p-4 grid gap-4">
+            <div className="flex items-center gap-2 border-b pb-3">
+              <LogIn className="h-4 w-4 text-emerald-700" aria-hidden />
+              <span className="text-sm font-bold">ستون راست — نوشته‌ها و توضیحات</span>
+            </div>
+
+            <LoginMediaPicker
+              target="side"
+              kind={side.bgKind}
+              url={side.bgUrl}
+              uploading={uploading}
+              onPick={upload}
+              onClear={clearMedia}
+              overlay={side.overlay}
+            />
+
+            <Field label={`درصد تاریکی روی پس‌زمینه (${side.overlay}٪)`} hint="فقط وقتی پس‌زمینه الصاق شده اعمال می‌شود — برای خوانایی متن روی تصویر/ویدیو">
+              <Slider
+                value={[side.overlay]}
+                min={0} max={80} step={5}
+                onValueChange={([v]: number[]) => setSide(s => (s ? { ...s, overlay: v } : s))}
+              />
+            </Field>
+
+            <Field label="رنگ متن‌های این ستون">
+              <TextToneSelect value={side.textTone} onChange={v => setSide(s => (s ? { ...s, textTone: v } : s))} />
+            </Field>
+
+            <Field label="عنوان اصلی" hint="کنار لوگو نمایش داده می‌شود — خالی = بدون عنوان">
+              <Input value={side.title} maxLength={80} onChange={e => setSide(s => (s ? { ...s, title: e.target.value } : s))} />
+            </Field>
+            <Field label="زیرعنوان" hint="زیر عنوان اصلی — حداکثر ۱۶۰ کاراکتر">
+              <Input value={side.subtitle} maxLength={160} onChange={e => setSide(s => (s ? { ...s, subtitle: e.target.value } : s))} />
+            </Field>
+            <Field label="بندهای توضیحات" hint="هر بند در یک خط — حداکثر ۸ بند و ۱۶۰ کاراکتر در هر خط">
+              <Textarea rows={5} value={itemsText} onChange={e => setItemsText(e.target.value)} />
+            </Field>
+            <Field label="متن پایین ستون" hint="حداکثر ۲۰۰ کاراکتر — خالی = نمایش داده نمی‌شود">
+              <Input value={side.footer} maxLength={200} onChange={e => setSide(s => (s ? { ...s, footer: e.target.value } : s))} />
+            </Field>
+          </div>
+
+          {/* ستون چپ — فرم ورود */}
+          <div className="rounded-xl border bg-card p-4 grid gap-4">
+            <div className="flex items-center gap-2 border-b pb-3">
+              <LogIn className="h-4 w-4 text-emerald-700" aria-hidden />
+              <span className="text-sm font-bold">ستون چپ — فرم ورود</span>
+            </div>
+
+            <LoginMediaPicker
+              target="form"
+              kind={form.bgKind}
+              url={form.bgUrl}
+              uploading={uploading}
+              onPick={upload}
+              onClear={clearMedia}
+            />
+
+            <Field label="رنگ کارت فرم" hint="با شفافیت بالا، پس‌زمینه از پشت کارت دیده می‌شود">
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="color"
+                  value={/^#[0-9a-fA-F]{6}$/.test(form.color) ? form.color : '#ffffff'}
+                  onChange={e => setForm(f => (f ? { ...f, color: e.target.value } : f))}
+                  className="h-9 w-12 rounded-md border cursor-pointer bg-transparent p-1"
+                  aria-label="انتخاب رنگ کارت فرم"
+                />
+                <Input
+                  dir="ltr"
+                  className="w-28"
+                  value={form.color}
+                  onChange={e => {
+                    const v = e.target.value
+                    if (/^#[0-9a-fA-F]{0,6}$/.test(v)) setForm(f => (f ? { ...f, color: v } : f))
+                  }}
+                />
+                <div className="flex items-center gap-1.5">
+                  {LOGIN_SWATCHES.map(c => (
+                    <button
+                      key={c}
+                      type="button"
+                      aria-label={`رنگ ${c}`}
+                      onClick={() => setForm(f => (f ? { ...f, color: c } : f))}
+                      className={`h-7 w-7 rounded-md border ${form.color.toLowerCase() === c ? 'ring-2 ring-emerald-600' : ''}`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </Field>
+
+            <Field label={`شفافیت کارت فرم (${form.transparency}٪)`} hint="۰٪ کاملاً مات — ۱۰۰٪ کاملاً شفاف">
+              <Slider
+                value={[form.transparency]}
+                min={0} max={100} step={5}
+                onValueChange={([v]: number[]) => setForm(f => (f ? { ...f, transparency: v } : f))}
+              />
+            </Field>
+
+            <Field label={`محو بودن پس‌زمینه پشت کارت (${form.blur} پیکسل)`} hint="بلور (Blur) پشت کارت — برای خوانایی روی تصویر/ویدیو">
+              <Slider
+                value={[form.blur]}
+                min={0} max={24} step={2}
+                onValueChange={([v]: number[]) => setForm(f => (f ? { ...f, blur: v } : f))}
+              />
+            </Field>
+
+            {/* پیش‌نمایش کارت با تنظیمات فعلی */}
+            <div className="grid gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">پیش‌نمایش کارت فرم</span>
+              <div className="relative h-20 rounded-lg border overflow-hidden bg-gradient-to-l from-stone-300 via-stone-100 to-stone-300">
+                <div
+                  className="absolute inset-x-8 inset-y-3 rounded-xl border shadow-sm grid place-items-center text-xs font-bold"
+                  style={{
+                    backgroundColor: hexToRgba(form.color, form.transparency),
+                    backdropFilter: form.blur > 0 ? `blur(${form.blur}px)` : undefined,
+                    WebkitBackdropFilter: form.blur > 0 ? `blur(${form.blur}px)` : undefined,
+                    color: form.textTone === 'light' || (form.textTone === 'auto' && form.bgKind !== 'none') ? '#ffffff' : undefined,
+                  }}
+                >
+                  نمونه کارت فرم
+                </div>
+              </div>
+            </div>
+
+            <Field label="رنگ متن‌های فرم">
+              <TextToneSelect value={form.textTone} onChange={v => setForm(f => (f ? { ...f, textTone: v } : f))} />
+            </Field>
+
+            <Field label="عنوان بالای فرم" hint="نوشته بالای فیلدها — خالی = بدون عنوان">
+              <Input value={form.title} maxLength={80} onChange={e => setForm(f => (f ? { ...f, title: e.target.value } : f))} />
+            </Field>
+            <Field label="زیرعنوان فرم" hint="زیر عنوان فرم — حداکثر ۱۶۰ کاراکتر">
+              <Input value={form.subtitle} maxLength={160} onChange={e => setForm(f => (f ? { ...f, subtitle: e.target.value } : f))} />
+            </Field>
+            <Field label="متن پایین فرم" hint="پس از دکمه ورود نمایش داده می‌شود — حداکثر ۲۰۰ کاراکتر">
+              <Textarea rows={2} value={form.footer} maxLength={200} onChange={e => setForm(f => (f ? { ...f, footer: e.target.value } : f))} />
+            </Field>
+
+            <label className="flex items-start gap-3 cursor-pointer">
+              <Switch
+                checked={form.showDemo}
+                onCheckedChange={v => setForm(f => (f ? { ...f, showDemo: v } : f))}
+                aria-label="نمایش حساب‌های نمایشی"
+              />
+              <span className="text-sm">
+                نمایش کادر «حساب‌های نمایشی»
+                <span className="block text-[11px] text-muted-foreground mt-0.5">
+                  در محیط واقعی خاموش کنید تا شماره‌ها و رمزهای نمایشی دیده نشوند.
+                </span>
+              </span>
+            </label>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-lg bg-stone-50 border p-3 text-[11px] text-muted-foreground leading-6">
+        پس از ذخیره، صفحه ورود با تنظیمات جدید باز می‌شود (برای مشاهده، از حساب خارج شوید یا صفحه را در حالت خروج بازخوانی کنید).
+        تصاویر تا ۸ و ویدیوها تا ۵۰ مگابایت پشتیبانی می‌شوند؛ ویدیوها بی‌صدا و به‌صورت خودکار و تکرارشونده پخش می‌شوند.
       </div>
     </div>
   )
