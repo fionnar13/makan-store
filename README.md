@@ -21,7 +21,7 @@
 | فریم‌ورک | Next.js 16 (App Router) |
 | زبان | TypeScript |
 | استایل | Tailwind CSS |
-| دیتابیس | Prisma ORM + SQLite |
+| دیتابیس | Prisma ORM + PostgreSQL (14+) |
 | رانتایم | Bun (یا Node.js) |
 
 ## راه‌اندازی سریع (لوکال)
@@ -30,15 +30,17 @@
 # ۱) نصب وابستگی‌ها
 bun install        # یا: npm install
 
-# ۲) ساخت فایل محیطی از روی نمونه
+# ۲) دیتابیس PostgreSQL و کاربر بسازید:
+psql -U postgres -c "CREATE ROLE makan LOGIN PASSWORD 'رمز-قوی' CREATEDB"
+psql -U postgres -c "CREATE DATABASE makan OWNER makan"
+
+# ۳) ساخت فایل محیطی از روی نمونه
 cp .env.example .env
-#    ⚠️ DATABASE_URL باید «مسیر مطلق» پوشه db پروژه باشد (نه مسیر نسبی)
+#    ⚠️ DATABASE_URL یک Connection String کامل است:
+#    postgresql://makan:رمز-قوی@localhost:5432/makan?schema=public
 
-# ۳) ساخت دیتابیس و کلاینت Prisma
-bun run db:generate
-bun run db:push
-
-# ۴) داده اولیه (Seed) — ساخت مدیر اولیه و داده‌های نمایشی
+# ۴) اعمال مهاجرت‌ها و ساخت داده اولیه (Seed)
+bun run db:migrate      # یا در پروداکشن: bun run db:deploy
 bun run db:seed
 
 # ۵) اجرا
@@ -48,6 +50,9 @@ bun run dev        # http://localhost:3000
 > **رمز مدیر اولیه**: پس از اولین Seed، اگر `ADMIN_PASSWORD` در `.env` تنظیم نشده باشد،
 > یک رمز تصادفی ساخته و در `db/.initial-admin-password.txt` ذخیره می‌شود.
 > برای رمز دلخواه، قبل از Seed مقدار `ADMIN_PASSWORD` را در `.env` قرار دهید.
+>
+> **داده واقعی SQLite دارید؟** با `bun run db:migrate-data` همه‌چیز (با حفظ IDها) منتقل می‌شود —
+> راهنمای کامل: [docs/postgres-migration.md](docs/postgres-migration.md)
 
 ## استقرار (Deployment)
 
@@ -66,20 +71,25 @@ bun run dev        # http://localhost:3000
 │   ├── app/            # صفحات و API Routes (Next.js App Router)
 │   ├── components/     # کامپوننت‌های UI (فروشگاه، کاتالوگ، پنل مدیریت)
 │   └── lib/            # احراز هویت، مجوزها، آپلود، ابزارهای API
-├── prisma/             # اسکیمای دیتابیس
-├── scripts/            # Seed و اسکریپت‌های کمکی
+├── prisma/
+│   ├── schema.prisma   # اسکیمای دیتابیس (PostgreSQL)
+│   └── migrations/     # مهاجرت‌های Prisma (برای prisma migrate deploy)
+├── scripts/            # Seed، مهاجرت داده و اسکریپت‌های کمکی
 ├── public/
 │   ├── products/       # تصاویر محصولات فروشگاه
 │   └── uploads/        # لوگو، فاوآیکون و تصاویر پروفایل (در رانتایم)
-├── db/                 # فایل SQLite (گیت نشده — با Seed ساخته می‌شود)
-├── Dockerfile · docker-compose.yml · ecosystem.config.js · Caddyfile
+├── docs/
+│   └── postgres-migration.md  # راهنمای کامل PG: استقرار، مهاجرت داده، Rollback
+├── Dockerfile · docker-compose.yml (با سرویس postgres:16-alpine) · ecosystem.config.js · Caddyfile
 └── راهنمای-نصب-و-راه-اندازی.md
 ```
 
 ## نکته‌های مهم
 
-- فایل `db/custom.db` (دیتابیس واقعی) و فایل‌های رمز در گیت **ذخیره نمی‌شوند**؛ پس از هر clone کافی است `db:push` و `db:seed` را اجرا کنید.
+- دیتابیس پروژه **PostgreSQL** است؛ برای استقرار با Docker، سرویس `db` در `docker-compose.yml` آماده است (Volume پایدار + Healthcheck) و پیش از هر استارت `prisma migrate deploy` اجرا می‌شود.
+- فایل‌های `db/` (بکاپ‌های SQLite و رمزها) و فایل `.env` در گیت **ذخیره نمی‌شوند**؛ پس از هر clone کافی است `db:migrate` و `db:seed` را اجرا کنید.
 - محتوای `public/uploads/` (لوگو، فاوآیکون، پروفایل‌ها) در رانتایم ساخته می‌شود و جزو ریپو نیست.
 - کوکی نشست برای کارکرد صحیح داخل iframe به‌صورت خودکار با `SameSite=None; Secure; Partitioned` (در HTTPS) تنظیم می‌شود.
+- راهنمای کامل مهاجرت SQLite → PostgreSQL و برنامه بازگشت (Rollback): [docs/postgres-migration.md](docs/postgres-migration.md)
 
 </div>

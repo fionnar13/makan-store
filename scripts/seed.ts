@@ -11,10 +11,17 @@
  */
 import { PrismaClient } from '@prisma/client'
 import { randomBytes, scryptSync, randomUUID } from 'node:crypto'
-import { writeFileSync } from 'node:fs'
+import { writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 const db = new PrismaClient()
+
+// پوشه db ممکن است پس از clone تازه وجود نداشته باشد (فایل‌هایش گیت نشده‌اند)
+function writeSecretFile(name: string, content: string) {
+  const dir = join(process.cwd(), 'db')
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, name), content, { mode: 0o600 })
+}
 
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString('hex')
@@ -292,10 +299,10 @@ async function main() {
   const adminPass = process.env.ADMIN_PASSWORD || genPassword()
   const demoPass = process.env.DEMO_USERS_PASSWORD || genPassword()
   if (!process.env.ADMIN_PASSWORD) {
-    writeFileSync(join(process.cwd(), 'db', '.initial-admin-password.txt'), adminPass, { mode: 0o600 })
+    writeSecretFile('.initial-admin-password.txt', adminPass)
   }
   if (!process.env.DEMO_USERS_PASSWORD) {
-    writeFileSync(join(process.cwd(), 'db', '.initial-demo-passwords.txt'), demoPass, { mode: 0o600 })
+    writeSecretFile('.initial-demo-passwords.txt', demoPass)
   }
 
   const users: Array<{ phone: string; name: string; roles: string[]; demo?: boolean }> = [

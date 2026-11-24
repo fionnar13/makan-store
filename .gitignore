@@ -70,3 +70,6 @@ agent-ctx/
 
 # Skills directory
 /skills/
+# ── PostgreSQL پرتابل محلی سندباکس (گیت نشود) ──
+/.pglocal/
+db/backups/

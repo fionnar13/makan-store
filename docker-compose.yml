@@ -1,18 +1,58 @@
+# ── Makan Store — Docker Compose (PostgreSQL) ──
+# ساخت:   docker compose build
+# اجرا:   docker compose up -d
+# لاگ‌ها: docker compose logs -f app
+# اپ روی http://localhost:3000 بالا می‌آید.
+#
+# ⚠️ رمز دیتابیس را قبل از اولین اجرا در فایل .env کنار همین فایل تنظیم کنید:
+#      POSTGRES_PASSWORD="یک-رمز-قوی"
+#    (اگر تنظیم نشود، رمز موقت CHANGE-ME استفاده می‌شود — فقط برای تست!)
+#
+# سرویس db یک PostgreSQL 16 با Volume پایدار است؛ داده‌ها بین ری‌استارت‌ها
+# و بین آپدیت‌های اپ باقی می‌مانند. فایل‌های آپلودی کاربران هم روی میزبان
+# در ./public/uploads نگهداری می‌شوند.
+
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: makan-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: makan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE-ME}
+      POSTGRES_DB: makan
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U makan -d makan"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    # دسترسی از خود میزبان برای بکاپ/psql (روی شبکه عمومی باز نیست):
+    ports:
+      - "127.0.0.1:5433:5432"
+
   app:
     build: .
-    container_name: bankehdari
+    container_name: makan-app
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - "3000:3000"
     environment:
       NODE_ENV: production
       PORT: "3000"
-      # پوشه db کنار docker-compose.yml به داخل کانتینر mount می‌شود؛
-      # پس دیتابیس روی سیستم میزبان باقی می‌ماند و با بکاپ آن به‌سادگی می‌توانید کپی بگیرید.
-      DATABASE_URL: file:/app/db/custom.db
+      DATABASE_URL: postgresql://makan:${POSTGRES_PASSWORD:-CHANGE-ME}@db:5432/makan?schema=public
+      DIRECT_URL: postgresql://makan:${POSTGRES_PASSWORD:-CHANGE-ME}@db:5432/makan?schema=public
       # اگر می‌خواهید «اولین Seed» با رمز دلخواه انجام شود، دو خط زیر را از کامنت خارج کنید:
       # ADMIN_PASSWORD: "YourAdmin#Pass"
       # DEMO_USERS_PASSWORD: "YourDemo#Pass"
     volumes:
-      - ./db:/app/db
+      # فایل‌های آپلودی (لوگو، فاوآیکون، تصاویر پروفایل) روی میزبان بمانند:
+      - ./public/uploads:/app/public/uploads
+
+volumes:
+  pgdata:

@@ -33,13 +33,12 @@ export async function reserveStockAtomic(
       throw new ApiError(409, 'NO_STOCK', 'برای این کالا در انبار مورد نظر موجودی ثبت نشده است', { productId })
     }
     // ۲) Update شرطی اتمیک — فقط اگر Available کافی باشد
-    const updated = await tx.$executeRawUnsafe(
-      `UPDATE InventoryBalance
-       SET reservedQtyBase = reservedQtyBase + ?
-       WHERE productId = ? AND warehouseId = ?
-         AND (physicalQtyBase - reservedQtyBase) >= ?`,
-      v.qty, productId, v.warehouseId, v.qty,
-    )
+    //    (tagged-template با identifierهای نقل‌قول‌شده — سازگار با SQLite و PostgreSQL)
+    const updated = await tx.$executeRaw`
+      UPDATE "InventoryBalance"
+      SET "reservedQtyBase" = "reservedQtyBase" + ${v.qty}
+      WHERE "productId" = ${productId} AND "warehouseId" = ${v.warehouseId}
+        AND ("physicalQtyBase" - "reservedQtyBase") >= ${v.qty}`
     if (updated === 0) {
       const fresh = await tx.inventoryBalance.findUnique({
         where: { productId_warehouseId: { productId, warehouseId: v.warehouseId } },
@@ -73,12 +72,11 @@ export async function releaseStockAtomic(
     perProduct.set(it.productId, { warehouseId: it.warehouseId, qty: (prev?.qty ?? 0) + it.qtyBase })
   }
   for (const [productId, v] of perProduct) {
-    const updated = await tx.$executeRawUnsafe(
-      `UPDATE InventoryBalance
-       SET reservedQtyBase = reservedQtyBase - ?
-       WHERE productId = ? AND warehouseId = ? AND reservedQtyBase >= ?`,
-      v.qty, productId, v.warehouseId, v.qty,
-    )
+    const updated = await tx.$executeRaw`
+      UPDATE "InventoryBalance"
+      SET "reservedQtyBase" = "reservedQtyBase" - ${v.qty}
+      WHERE "productId" = ${productId} AND "warehouseId" = ${v.warehouseId}
+        AND "reservedQtyBase" >= ${v.qty}`
     if (updated === 0) {
       throw new ApiError(409, 'RELEASE_CONFLICT', 'رزرو برای آزادسازی کافی نیست', { productId, requestedBase: v.qty })
     }
@@ -129,13 +127,12 @@ export async function issueStockFEFO(
         { productId: it.productId, shortageBase: remaining })
     }
     // کاهش موجودی فیزیکی و رزرو به‌اندازه خروج
-    const updated = await tx.$executeRawUnsafe(
-      `UPDATE InventoryBalance
-       SET physicalQtyBase = physicalQtyBase - ?, reservedQtyBase = reservedQtyBase - ?
-       WHERE productId = ? AND warehouseId = ?
-         AND physicalQtyBase >= ? AND reservedQtyBase >= ?`,
-      it.qtyBase, it.qtyBase, it.productId, it.warehouseId, it.qtyBase, it.qtyBase,
-    )
+    const updated = await tx.$executeRaw`
+      UPDATE "InventoryBalance"
+      SET "physicalQtyBase" = "physicalQtyBase" - ${it.qtyBase},
+          "reservedQtyBase" = "reservedQtyBase" - ${it.qtyBase}
+      WHERE "productId" = ${it.productId} AND "warehouseId" = ${it.warehouseId}
+        AND "physicalQtyBase" >= ${it.qtyBase} AND "reservedQtyBase" >= ${it.qtyBase}`
     if (updated === 0) {
       throw new ApiError(409, 'PHYSICAL_SHORTAGE', 'کاهش موجودی فیزیکی ناموفق بود', { productId: it.productId })
     }
@@ -202,13 +199,12 @@ export async function adjustStock(
       },
     })
   } else {
-    const updated = await tx.$executeRawUnsafe(
-      `UPDATE InventoryBalance
-       SET physicalQtyBase = physicalQtyBase + ?
-       WHERE productId = ? AND warehouseId = ? AND (physicalQtyBase + ?) >= 0
-         AND (physicalQtyBase - reservedQtyBase) >= ?`,
-      input.deltaBase, input.productId, input.warehouseId, input.deltaBase, -input.deltaBase,
-    )
+    const updated = await tx.$executeRaw`
+      UPDATE "InventoryBalance"
+      SET "physicalQtyBase" = "physicalQtyBase" + ${input.deltaBase}
+      WHERE "productId" = ${input.productId} AND "warehouseId" = ${input.warehouseId}
+        AND ("physicalQtyBase" + ${input.deltaBase}) >= 0
+        AND ("physicalQtyBase" - "reservedQtyBase") >= ${-input.deltaBase}`
     if (updated === 0) {
       throw new ApiError(409, 'ADJUST_CONFLICT', 'تعدیل ناممکن است؛ موجودی فیزیکی یا رزرو کافی نیست')
     }

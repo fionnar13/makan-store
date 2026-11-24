@@ -1,15 +1,20 @@
 // بنکداری هوشمند — سامانه B2B مدیریت بنکداری مواد غذایی
-// Schema (Prisma + SQLite)
+// Schema (Prisma + PostgreSQL)
 // قوانین: مبالغ مالی به‌صورت Integer در کوچک‌ترین واحد (ریال)؛
 // مقادیر انبار به‌صورت Integer در واحد پایه محصول؛ بدون Float.
+//
+// نکته اتصال: DATABASE_URL برای اتصال عادی (در سرویس‌های pooled مثل
+// Neon/Supabase از پورت pooled/Connection Pooler استفاده می‌کند) و
+// DIRECT_URL برای مهاجرت‌ها (اتصال مستقیم). در داکر/لوکال هر دو یکسان‌اند.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ───────────────────────────── Identity & Access ─────────────────────────────
