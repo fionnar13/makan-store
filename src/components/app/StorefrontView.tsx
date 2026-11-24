@@ -1,0 +1,446 @@
+'use client'
+// فروشگاه محصولات — نمای فروشگاهیِ کاتالوگ برای نمایش بهترین شکل محصولات به مشتری
+// همان لیستی که ویزیتور می‌بیند و به مشتری نشان می‌دهد؛ مدیر سیستم و آدمین نیز همین نما را می‌بینند
+// امکانات: جستجو، فیلتر دسته‌بندی و برند (برندها وابسته به دسته‌بندی)، مرتب‌سازی،
+// کارت محصول با قیمت عمومی و موجودی زنده، مشاهده جزئیات و مقایسه تا ۴ محصول
+import { useMemo, useState } from 'react'
+import { ErrorState, Money, formatFaNumber, useApiData } from './kit'
+import { COMPARE_MAX, ProductTile, stockInfo, type StoreMeta } from './StoreShared'
+import CompareDialog from './StoreCompare'
+import type { ProductListItem } from './types'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Eye, GitCompareArrows, PackageX, RefreshCw, Scale, Search, Store, Trash2, X } from 'lucide-react'
+import { toast } from 'sonner'
+
+const COMPARE_HINT = 'حداکثر ۴ محصول هم‌زمان قابل مقایسه است'
+
+export default function StorefrontView() {
+  const { data, loading, error, reload } = useApiData<ProductListItem[]>('/api/products')
+  const { data: meta } = useApiData<StoreMeta>('/api/products?meta=1')
+  const [q, setQ] = useState('')
+  const [categoryId, setCategoryId] = useState<string | null>(null)
+  const [brandId, setBrandId] = useState<string | null>(null)
+  const [sort, setSort] = useState('newest')
+  const [onlyActive, setOnlyActive] = useState(true)
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [compareIds, setCompareIds] = useState<string[]>([])
+  const [compareOpen, setCompareOpen] = useState(false)
+
+  // جستجو و فیلتر فعال — پایه شمارش دسته‌ها و مرتب‌سازی
+  const baseList = useMemo(() => {
+    const needle = q.trim()
+    return (data ?? []).filter(p =>
+      (!onlyActive || p.isActive) &&
+      (!needle ||
+        p.name.includes(needle) ||
+        p.sku.toLowerCase().includes(needle.toLowerCase()) ||
+        (p.brand ?? '').includes(needle) ||
+        (p.description ?? '').includes(needle)),
+    )
+  }, [data, q, onlyActive])
+
+  const catCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of baseList) if (p.categoryId) m.set(p.categoryId, (m.get(p.categoryId) ?? 0) + 1)
+    return m
+  }, [baseList])
+
+  // برندها وابسته به دسته‌بندی‌اند — با انتخاب دسته فقط برندهای همان دسته نمایش داده می‌شود
+  const brandOptions = useMemo(
+    () => (meta?.brands ?? []).filter(b => !categoryId || b.categoryId === categoryId),
+    [meta, categoryId],
+  )
+
+  const filtered = useMemo(() => {
+    let list = baseList.filter(p => (!categoryId || p.categoryId === categoryId) && (!brandId || p.brandId === brandId))
+    const basePrice = (p: ProductListItem) =>
+      p.units.find(u => u.isBase)?.defaultPriceRls ?? p.units.find(u => u.defaultPriceRls != null)?.defaultPriceRls ?? null
+    switch (sort) {
+      case 'priceAsc': list = [...list].sort((a, b) => (basePrice(a) ?? Infinity) - (basePrice(b) ?? Infinity)); break
+      case 'priceDesc': list = [...list].sort((a, b) => (basePrice(b) ?? -Infinity) - (basePrice(a) ?? -Infinity)); break
+      case 'stock': list = [...list].sort((a, b) => b.availableBase - a.availableBase); break
+      case 'name': list = [...list].sort((a, b) => a.name.localeCompare(b.name, 'fa')); break
+      default: list = [...list].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    }
+    return list
+  }, [baseList, categoryId, brandId, sort])
+
+  const all = data ?? []
+  const detail = detailId ? all.find(p => p.id === detailId) ?? null : null
+  const compareProducts = compareIds
+    .map(id => all.find(p => p.id === id))
+    .filter((p): p is ProductListItem => !!p)
+
+  const changeCategory = (id: string | null) => {
+    setCategoryId(id)
+    setBrandId(null) // برند انتخابی ممکن است به دسته جدید تعلق نداشته باشد
+  }
+
+  const toggleCompare = (id: string) => {
+    setCompareIds(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id)
+      if (prev.length >= COMPARE_MAX) {
+        toast.error(COMPARE_HINT)
+        return prev
+      }
+      return [...prev, id]
+    })
+  }
+
+  return (
+    <div>
+      {/* بنر فروشگاهی */}
+      <div className="rounded-2xl overflow-hidden bg-gradient-to-l from-emerald-800 via-emerald-600 to-teal-500 text-white shadow-md mb-5">
+        <div className="p-5 md:p-6 flex flex-col md:flex-row md:items-center gap-4">
+          <div className="flex-1">
+            <div className="text-xl md:text-2xl font-black flex items-center gap-2.5">
+              <span className="grid place-items-center h-10 w-10 rounded-xl bg-white/15" aria-hidden><Store className="h-5 w-5" /></span>
+              فروشگاه محصولات
+            </div>
+            <p className="text-xs md:text-sm text-white/80 mt-2 leading-6 max-w-2xl">
+              همان کاتالوگی که ویزیتور به مشتری نشان می‌دهد — با قیمت عمومی، موجودی زنده و امکان مقایسه؛
+              مدیر سیستم و آدمین نیز همین نما را می‌بینند
+            </p>
+          </div>
+          <div className="relative w-full md:w-80">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" aria-hidden />
+            <Input
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="جستجوی نام، برند یا SKU…"
+              aria-label="جستجوی محصول"
+              className="bg-white/95 text-stone-800 border-0 pr-9 placeholder:text-stone-400"
+            />
+          </div>
+          <Button
+            variant="outline" size="sm" onClick={reload}
+            className="bg-white/10 border-white/30 text-white hover:bg-white/20 hover:text-white shrink-0"
+          >
+            <RefreshCw className="h-4 w-4 ml-1" /> به‌روزرسانی
+          </Button>
+        </div>
+      </div>
+
+      {/* فیلتر دسته‌بندی‌ها */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-2" role="group" aria-label="فیلتر دسته‌بندی">
+        <Chip active={categoryId === null} onClick={() => changeCategory(null)}>همه دسته‌ها</Chip>
+        {meta?.categories?.map(c => (
+          <Chip key={c.id} active={categoryId === c.id} onClick={() => changeCategory(c.id)}>
+            {c.name}
+            <span className="mr-1 rounded-full bg-black/10 px-1.5 text-[10px] leading-5">{formatFaNumber(catCounts.get(c.id) ?? 0)}</span>
+          </Chip>
+        ))}
+      </div>
+
+      {/* فیلتر برندها — وابسته به دسته‌بندی انتخابی */}
+      <div className="flex flex-wrap items-center gap-1.5 mb-3" role="group" aria-label="فیلتر برند">
+        <Chip tone="brand" active={brandId === null} onClick={() => setBrandId(null)}>همه برندها</Chip>
+        {brandOptions.map(b => (
+          <Chip key={b.id} tone="brand" active={brandId === b.id} onClick={() => setBrandId(b.id)}>
+            {b.name}{!b.isConfirmed && <span className="text-[9px] opacity-70"> (نیازمند تأیید)</span>}
+          </Chip>
+        ))}
+        {brandOptions.length === 0 && (
+          <span className="text-[11px] text-muted-foreground">برندی برای این دسته ثبت نشده است</span>
+        )}
+      </div>
+
+      {/* نوار ابزار */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground whitespace-nowrap">مرتب‌سازی:</span>
+          <Select value={sort} onValueChange={setSort}>
+            <SelectTrigger className="h-8 w-44 text-xs" aria-label="ترتیب نمایش"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">جدیدترین</SelectItem>
+              <SelectItem value="name">نام (الفبا)</SelectItem>
+              <SelectItem value="priceAsc">ارزان‌ترین</SelectItem>
+              <SelectItem value="priceDesc">گران‌ترین</SelectItem>
+              <SelectItem value="stock">بیشترین موجودی</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+          <Switch checked={onlyActive} onCheckedChange={setOnlyActive} aria-label="فقط کالاهای فعال" />
+          فقط کالاهای فعال
+        </label>
+        <span className="text-xs text-muted-foreground mr-auto">
+          {loading ? 'در حال بارگذاری…' : `${formatFaNumber(filtered.length)} کالا`}
+        </span>
+      </div>
+
+      {/* شبکه محصولات */}
+      {error ? (
+        <ErrorState text={error} onRetry={reload} />
+      ) : loading ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-80 rounded-2xl" />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-2xl border bg-card py-14 text-center">
+          <PackageX className="h-10 w-10 text-stone-300 mx-auto" aria-hidden />
+          <p className="text-sm text-muted-foreground mt-3">محصولی با این فیلترها یافت نشد</p>
+          <Button variant="outline" size="sm" className="mt-4" onClick={() => { setQ(''); changeCategory(null); setBrandId(null) }}>
+            پاک کردن فیلترها
+          </Button>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {filtered.map(p => (
+            <ProductCard
+              key={p.id}
+              p={p}
+              inCompare={compareIds.includes(p.id)}
+              onToggleCompare={() => toggleCompare(p.id)}
+              onDetail={() => setDetailId(p.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      <p className="text-[11px] text-muted-foreground mt-6 leading-5">
+        قیمت‌های نمایش‌داده‌شده «قیمت عمومی» است؛ قیمت اختصاصی هر مشتری بر اساس قواعد قیمت‌گذاری
+        (گروه مشتری، منطقه، مقدار خرید یا اختصاصی) در لحظه ثبت سفارش محاسبه می‌شود. {COMPARE_HINT}.
+      </p>
+
+      {/* نوار شناور مقایسه */}
+      {compareIds.length > 0 && (
+        <div className="fixed bottom-4 inset-x-0 z-40 flex justify-center px-4 pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-stone-900/95 text-white shadow-2xl border border-stone-700 py-2 pr-4 pl-2 max-w-full overflow-x-auto">
+            <span className="text-xs text-white/60 whitespace-nowrap shrink-0 hidden sm:block">انتخاب مقایسه:</span>
+            {compareProducts.map(p => (
+              <span key={p.id} className="flex items-center gap-1 rounded-full bg-white/10 py-1 pr-3 pl-1.5 text-[11px] whitespace-nowrap">
+                {p.name.length > 20 ? `${p.name.slice(0, 20)}…` : p.name}
+                <button
+                  onClick={() => toggleCompare(p.id)}
+                  aria-label={`حذف ${p.name} از مقایسه`}
+                  className="rounded-full hover:bg-white/20 p-0.5"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            <Button
+              size="sm"
+              disabled={compareIds.length < 2}
+              onClick={() => setCompareOpen(true)}
+              className="rounded-full bg-emerald-500 hover:bg-emerald-600 text-white h-8 shrink-0"
+              title={compareIds.length < 2 ? 'حداقل دو محصول برای مقایسه لازم است' : undefined}
+            >
+              <Scale className="h-4 w-4 ml-1" /> مقایسه ({formatFaNumber(compareIds.length)})
+            </Button>
+            <button onClick={() => setCompareIds([])} aria-label="پاک کردن انتخاب مقایسه" className="rounded-full hover:bg-white/20 p-1.5 shrink-0">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ProductDetailDialog p={detail} onClose={() => setDetailId(null)} />
+      <CompareDialog open={compareOpen} onOpenChange={setCompareOpen} products={compareProducts} onRemove={toggleCompare} />
+    </div>
+  )
+}
+
+// ─── کارت محصول ───
+
+function ProductCard({ p, inCompare, onToggleCompare, onDetail }: {
+  p: ProductListItem
+  inCompare: boolean
+  onToggleCompare: () => void
+  onDetail: () => void
+}) {
+  const base = p.units.find(u => u.isBase) ?? null
+  const carton = p.units.find(u => !u.isBase && u.defaultPriceRls != null) ?? p.units.find(u => !u.isBase) ?? null
+  const headline = carton ?? base // قیمت کارتن (عمده) در صدر؛ در نبود آن قیمت واحد پایه
+  const secondary = headline && base && headline.id !== base.id ? base : null
+  const st = stockInfo(p)
+
+  return (
+    <div className="group rounded-2xl border bg-card overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all flex flex-col">
+      <div className="relative aspect-[4/3] overflow-hidden">
+        <ProductTile p={p} />
+        <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
+          {p.isDemo && <Badge variant="outline" className="text-[9px] bg-white/90 text-amber-700 border-amber-300 backdrop-blur">DEMO_SEED</Badge>}
+          {!p.isActive && <Badge variant="outline" className="text-[9px] bg-white/90 text-rose-600 border-rose-300 backdrop-blur">غیرفعال</Badge>}
+        </div>
+        {p.category && (
+          <span className="absolute top-2 left-2 rounded-full bg-white/90 backdrop-blur px-2.5 py-1 text-[10px] font-bold text-stone-600 shadow-sm">
+            {p.category}
+          </span>
+        )}
+        {p.brand && (
+          <span className="absolute bottom-2 right-2 rounded-full bg-stone-900/75 backdrop-blur px-2.5 py-1 text-[10px] font-bold text-white shadow-sm">
+            {p.brand}
+          </span>
+        )}
+      </div>
+
+      <div className="p-3 flex flex-col gap-2 flex-1">
+        <button onClick={onDetail} className="text-right" title="نمایش جزئیات محصول">
+          <div className="text-sm font-bold leading-6 line-clamp-2 min-h-[3rem]">{p.name}</div>
+        </button>
+        {p.description && <p className="text-[11px] text-muted-foreground leading-5 line-clamp-2">{p.description}</p>}
+
+        <div className="flex items-center gap-1.5 text-[11px]">
+          <span className={`h-2 w-2 rounded-full ${st.dot}`} aria-hidden />
+          <span className={st.cls}>{st.label}</span>
+          <span className="text-muted-foreground">— موجودی: {formatFaNumber(p.availableBase)} {p.baseUnitName}</span>
+        </div>
+
+        <div className="mt-auto pt-2 border-t border-dashed">
+          {headline?.defaultPriceRls != null ? (
+            <>
+              <Money rls={headline.defaultPriceRls} className="text-base font-black text-emerald-700" />
+              <div className="text-[10px] text-muted-foreground mt-0.5">
+                {headline.name}
+                {secondary?.defaultPriceRls != null && (
+                  <> | {secondary.name}: <Money rls={secondary.defaultPriceRls} className="font-bold text-stone-600" /></>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="text-xs text-muted-foreground py-1">بدون قیمت عمومی ثبت‌شده</div>
+          )}
+        </div>
+
+        {p.minOrderQtyBase > 1 && (
+          <p className="text-[10px] text-muted-foreground">حداقل سفارش: {formatFaNumber(p.minOrderQtyBase)} {p.baseUnitName}</p>
+        )}
+
+        <div className="flex items-center gap-1.5">
+          <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={onDetail}>
+            <Eye className="h-3.5 w-3.5 ml-1" /> جزئیات
+          </Button>
+          <Button
+            size="sm"
+            variant={inCompare ? 'default' : 'outline'}
+            onClick={onToggleCompare}
+            aria-pressed={inCompare}
+            className={`flex-1 h-8 text-xs ${inCompare ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`}
+          >
+            <GitCompareArrows className="h-3.5 w-3.5 ml-1" /> {inCompare ? 'در مقایسه' : 'مقایسه'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── مشاهده جزئیات محصول ───
+
+function ProductDetailDialog({ p, onClose }: { p: ProductListItem | null; onClose: () => void }) {
+  const st = p ? stockInfo(p) : null
+  return (
+    <Dialog open={!!p} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        {p && st && (
+          <>
+            <DialogHeader>
+              <DialogTitle>{p.name}</DialogTitle>
+              <DialogDescription className="flex flex-wrap items-center gap-1.5 pt-1">
+                {p.brand && <Badge variant="secondary" className="text-[10px]">{p.brand}{!p.brandConfirmed && ' (نیازمند تأیید)'}</Badge>}
+                {p.category && <Badge variant="outline" className="text-[10px]">{p.category}</Badge>}
+                {p.isDemo && <Badge variant="outline" className="text-[9px] text-amber-700 border-amber-300">DEMO_SEED</Badge>}
+                {!p.isActive && <Badge variant="outline" className="text-[9px] text-rose-600 border-rose-300">غیرفعال</Badge>}
+              </DialogDescription>
+            </DialogHeader>
+
+            {/* ارتفاع ثابت — aspect-ratio روی آیتم گریدِ Dialog در Chrome ردیف را به‌هم می‌ریزد */}
+            <div className="rounded-xl overflow-hidden h-52 sm:h-60 border bg-stone-50">
+              <ProductTile p={p} />
+            </div>
+
+            {p.description && <p className="text-xs text-stone-600 leading-6">{p.description}</p>}
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <SpecBox label="موجودی قابل فروش" value={`${formatFaNumber(p.availableBase)} ${p.baseUnitName}`} />
+              <SpecBox label="وضعیت موجودی" value={st.label} />
+              <SpecBox label="حداقل سفارش" value={`${formatFaNumber(p.minOrderQtyBase)} ${p.baseUnitName}`} />
+              <SpecBox label="مضرب سفارش" value={formatFaNumber(p.orderMultipleBase)} />
+              {p.weightG != null && <SpecBox label="وزن" value={`${formatFaNumber(p.weightG)} گرم`} />}
+              {p.volumeMl != null && <SpecBox label="حجم" value={`${formatFaNumber(p.volumeMl)} میلی‌لیتر`} />}
+              {p.packagingType && <SpecBox label="نوع بسته‌بندی" value={p.packagingType} />}
+              <SpecBox label="SKU" value={p.sku} ltr />
+            </div>
+
+            <div className="rounded-xl border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-stone-50 hover:bg-stone-50">
+                    <TableHead>واحد فروش</TableHead>
+                    <TableHead>فاکتور پایه</TableHead>
+                    <TableHead>بارکد</TableHead>
+                    <TableHead>قیمت عمومی</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {p.units.map(u => (
+                    <TableRow key={u.id}>
+                      <TableCell className="text-xs font-medium">
+                        {u.name}
+                        {u.isBase && <Badge variant="secondary" className="text-[9px] mr-1.5">پایه</Badge>}
+                      </TableCell>
+                      <TableCell className="text-xs">×{formatFaNumber(u.factor)}</TableCell>
+                      <TableCell className="text-[11px]" dir="ltr">{u.barcode ?? '—'}</TableCell>
+                      <TableCell>
+                        {u.defaultPriceRls != null
+                          ? <Money rls={u.defaultPriceRls} className="text-xs font-bold text-emerald-700" />
+                          : <span className="text-xs text-muted-foreground">—</span>}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <p className="text-[10px] text-muted-foreground leading-5">
+              قیمت عمومی مبنای نمایش است؛ قیمت نهایی هر مشتری طبق قواعد قیمت‌گذاری (گروه، منطقه، مقدار خرید یا اختصاصی)
+              هنگام ثبت سفارش توسط سرور محاسبه می‌شود.
+            </p>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function SpecBox({ label, value, ltr }: { label: string; value: string; ltr?: boolean }) {
+  return (
+    <div className="rounded-lg border bg-stone-50 p-2.5">
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+      <div className="text-xs font-bold mt-1" dir={ltr ? 'ltr' : undefined}>{value}</div>
+    </div>
+  )
+}
+
+// ─── چیپ فیلتر ───
+
+function Chip({ active, onClick, children, tone = 'cat' }: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+  tone?: 'cat' | 'brand'
+}) {
+  const activeCls = tone === 'brand'
+    ? 'bg-stone-800 text-white border-stone-800 shadow-sm'
+    : 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+        active ? activeCls : 'bg-card text-stone-600 border-stone-200 hover:border-emerald-400 hover:text-emerald-700'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}

@@ -1,0 +1,627 @@
+// بنکداری هوشمند — سامانه B2B مدیریت بنکداری مواد غذایی
+// Schema (Prisma + SQLite)
+// قوانین: مبالغ مالی به‌صورت Integer در کوچک‌ترین واحد (ریال)؛
+// مقادیر انبار به‌صورت Integer در واحد پایه محصول؛ بدون Float.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Identity & Access ─────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  phone         String    @unique
+  name          String
+  passwordHash  String
+  avatarUrl     String?   // تصویر پروفایل کاربر (مسیر فایل در public/uploads/avatars)
+  isActive      Boolean   @default(true)
+  phoneVerified Boolean   @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  roles     UserRole[]
+  sessions  Session[]
+  messagesSent     Message[] @relation("MessageSender")
+  messagesReceived Message[] @relation("MessageRecipient")
+  auditLogs        AuditLog[]
+}
+
+model Role {
+  id        String   @id @default(cuid())
+  name      String   @unique // e.g. ADMIN
+  label     String   // مدیر کل
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  users     UserRole[]
+  perms     RolePermission[]
+}
+
+model Permission {
+  id    String @id @default(cuid())
+  code  String @unique // e.g. orders.create
+  label String
+  roles RolePermission[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  ip        String?
+  userAgent String?
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ───────────────────────────── Employees & Territories ───────────────────────
+
+model Employee {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  fullName  String
+  phone     String?
+  position  String?
+  userId    String?   @unique
+  hireDate  DateTime?
+  status    String    @default("ACTIVE") // ACTIVE | INACTIVE
+  createdAt DateTime  @default(now())
+}
+
+model Territory {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  polygonJson String?  // GeoJSON (ورودی معتبر GIS یا ترسیم مدیر — حدس زده نمی‌شود)
+  visitorId   String?  // User.id ویزیتور مسئول
+  isActive    Boolean  @default(true)
+  note        String?
+  createdAt   DateTime @default(now())
+  customers   Customer[]
+}
+
+// ───────────────────────────── Customers ─────────────────────────────────────
+
+model Customer {
+  id             String    @id @default(cuid())
+  code           String    @unique
+  shopName       String
+  businessType   String    @default("GROCERY") // GROCERY | SUPERMARKET | OTHER
+  groupKey       String    @default("REGULAR") // گروه مشتری برای قیمت‌گذاری: REGULAR | GOLD | WHOLESALE
+  ownerName      String?
+  phone          String
+  taxId          String?
+  address        String?
+  territoryId    String?
+  salesRepId     String?   // User.id ویزیتور مسئول
+  creditLimitRls Int       @default(0)
+  creditDays     Int       @default(0)
+  status         String    @default("ACTIVE") // ACTIVE | INACTIVE | BLOCKED
+  isDemo         Boolean   @default(false)
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  territory Territory?       @relation(fields: [territoryId], references: [id])
+  branches  CustomerBranch[]
+  orders    Order[]
+  ledger    CustomerLedger[]
+  receipts  Receipt[]
+  returns   ReturnRequest[]
+  visits    Visit[]
+
+  @@index([shopName])
+}
+
+model CustomerBranch {
+  id           String   @id @default(cuid())
+  customerId   String
+  name         String
+  address      String?
+  phone        String?
+  managerName  String?
+  lat          Float?
+  lng          Float?
+  workingHours String?
+  isActive     Boolean  @default(true)
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orders       Order[]
+
+  @@index([customerId])
+}
+
+// ───────────────────────────── Suppliers ─────────────────────────────────────
+
+model Supplier {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  type        String   @default("PRODUCER") // PRODUCER | IMPORTER | WHOLESALER
+  phone       String?
+  contactName String?
+  address     String?
+  terms       String?
+  status      String   @default("ACTIVE") // ACTIVE | INACTIVE
+  isDemo      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  lots  InventoryLot[]
+  ledger SupplierLedger[]
+  payments Payment[]
+}
+
+// ───────────────────────────── Catalog ───────────────────────────────────────
+
+model Category {
+  id       String     @id @default(cuid())
+  name     String     @unique
+  parentId String?
+  parent   Category?  @relation("CatTree", fields: [parentId], references: [id])
+  children Category[] @relation("CatTree")
+  products Product[]
+  brands   Brand[]
+}
+
+model Brand {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  categoryId  String? // هر برند متعلق به یک دسته‌بندی است (برندها وابسته به دسته‌بندی)
+  category    Category? @relation(fields: [categoryId], references: [id])
+  isConfirmed Boolean   @default(false) // برندهای نامطمئن نیازمند تأیید مدیر
+  isDemo      Boolean   @default(false)
+  products    Product[]
+}
+
+model Product {
+  id               String    @id @default(cuid())
+  sku              String    @unique
+  name             String
+  description      String?
+  brandId          String?
+  categoryId       String?
+  imageUrl         String?
+  baseUnitName     String    @default("عدد")
+  weightG          Int?
+  volumeMl         Int?
+  packagingType    String?
+  minOrderQtyBase  Int       @default(1)
+  orderMultipleBase Int      @default(1)
+  reorderPointBase Int       @default(20) // نقطه سفارش برای هشدار کم‌موجودی
+  isActive         Boolean   @default(true)
+  isDemo           Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  brand    Brand?        @relation(fields: [brandId], references: [id])
+  category Category?     @relation(fields: [categoryId], references: [id])
+  units    ProductUnit[]
+  prices   PriceRule[]
+  lots     InventoryLot[]
+  balances InventoryBalance[]
+  orderItems OrderItem[]
+  returnItems ReturnItem[]
+  ledgerEntries InventoryLedger[]
+
+  @@index([name])
+}
+
+model ProductUnit {
+  id        String  @id @default(cuid())
+  productId String
+  name      String  // تکی ۸۰۰ گرمی | کارتن ۲۴ عددی
+  factor    Int     // تعداد واحد پایه در این واحد (۱ برای پایه)
+  barcode   String?
+  isBase    Boolean @default(false)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  priceRules PriceRule[]
+
+  @@index([productId])
+}
+
+// قواعد قیمت‌گذاری — موتور سمت سرور
+// scope: DEFAULT | CUSTOMER | GROUP | TERRITORY | VOLUME
+model PriceRule {
+  id        String    @id @default(cuid())
+  productId String
+  unitId    String
+  scope     String    @default("DEFAULT")
+  refId     String?   // بسته به scope: customerId | groupKey | territoryId
+  priceRls  Int
+  minQtyBase Int      @default(1)
+  maxQtyBase Int?
+  startAt   DateTime?
+  endAt     DateTime?
+  isActive  Boolean   @default(true)
+  note      String?   // e.g. DEMO_SEED
+  createdAt DateTime  @default(now())
+
+  product Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  unit    ProductUnit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@index([productId, unitId, scope, isActive])
+}
+
+// ───────────────────────────── Inventory Engine ──────────────────────────────
+
+model Warehouse {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  isDefault Boolean  @default(false)
+  lots      InventoryLot[]
+  balances  InventoryBalance[]
+}
+
+model InventoryLot {
+  id              String    @id @default(cuid())
+  productId       String
+  warehouseId     String
+  lotNo           String
+  producedAt      DateTime?
+  expiresAt       DateTime?
+  supplierId      String?
+  initialQtyBase  Int
+  remainingQtyBase Int
+  costRls         Int?      // بهای تمام‌شده هر واحد پایه (ریال) — مبنای سود ناخالص تخمینی
+  refType         String?   // RECEIVE | RETURN | SEED | ADJUST
+  refId           String?
+  isDemo          Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+
+  product   Product  @relation(fields: [productId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  supplier  Supplier? @relation(fields: [supplierId], references: [id])
+  ledger    InventoryLedger[]
+
+  @@index([productId, warehouseId])
+  @@index([expiresAt])
+}
+
+// موجودی هر محصول در هر انبار — Physical / Reserved / Available
+model InventoryBalance {
+  id              String   @id @default(cuid())
+  productId       String
+  warehouseId     String
+  physicalQtyBase Int      @default(0)
+  reservedQtyBase Int      @default(0)
+  product         Product   @relation(fields: [productId], references: [id])
+  warehouse       Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@unique([productId, warehouseId])
+}
+
+model InventoryLedger {
+  id            String    @id @default(cuid())
+  productId     String
+  warehouseId   String
+  lotId         String?
+  movement      String    // RECEIVE | OUT | RESERVE | RELEASE | ADJUST | TRANSFER_OUT | TRANSFER_IN | RETURN_IN | SCRAP
+  physDelta     Int       @default(0)
+  reservedDelta Int       @default(0)
+  refType       String?   // ORDER | RETURN | RECEIVE | ADJUST | TRANSFER
+  refId         String?
+  note          String?
+  userId        String?
+  createdAt     DateTime  @default(now())
+
+  lot InventoryLot? @relation(fields: [lotId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId, createdAt])
+  @@index([refType, refId])
+}
+
+// ───────────────────────────── Orders (State Machine) ────────────────────────
+
+// DRAFT → SUBMITTED → RESERVED → CONFIRMED → CREDIT_APPROVED/PAID → PICKING
+// → READY_FOR_DISPATCH → DISPATCHED → DELIVERED → COMPLETED
+// + CANCELLED / REJECTED
+model Order {
+  id               String    @id @default(cuid())
+  orderNo          String    @unique
+  customerId       String
+  branchId         String?
+  status           String    @default("SUBMITTED")
+  createdById      String
+  visitorId        String?
+  driverId         String?
+  payMethod        String    @default("CREDIT") // CASH | CREDIT | TRANSFER
+  creditApproved   Boolean   @default(false)
+  branch           CustomerBranch? @relation(fields: [branchId], references: [id])
+  totalRls         Int       @default(0)
+  discountTotalRls Int       @default(0)
+  itemsCountBase   Int       @default(0)
+  idempotencyKey   String?   @unique
+  notes            String?
+  reservedAt       DateTime?
+  confirmedAt      DateTime?
+  paidAt           DateTime?
+  dispatchedAt     DateTime?
+  deliveredAt      DateTime?
+  completedAt      DateTime?
+  cancelledAt      DateTime?
+  isDemo           Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  customer   Customer          @relation(fields: [customerId], references: [id])
+  items      OrderItem[]
+  events     OrderStatusEvent[]
+  invoice    Invoice?
+  returns    ReturnRequest[]
+
+  @@index([status, createdAt])
+  @@index([customerId])
+}
+
+model OrderItem {
+  id               String  @id @default(cuid())
+  orderId          String
+  productId        String
+  unitId           String
+  qtyBase          Int     // مقدار به واحد پایه
+  unitName         String  // Snapshot نام واحد فروش
+  unitPriceRls     Int     // Snapshot قیمت هر واحد فروش
+  lineDiscountRls  Int     @default(0)
+  lineTotalRls     Int     // qtyBase/unitFactor * unitPriceRls - discount
+  priceSnapshotJson String // Snapshot کامل قیمت
+  order            Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product          Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+}
+
+model OrderStatusEvent {
+  id         String    @id @default(cuid())
+  orderId    String
+  fromStatus String?
+  toStatus   String
+  userId     String?
+  note       String?
+  createdAt  DateTime  @default(now())
+  order      Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+// ───────────────────────────── Finance (Ledger-based) ────────────────────────
+
+model Invoice {
+  id         String    @id @default(cuid())
+  invoiceNo  String    @unique
+  orderId    String?   @unique
+  customerId String
+  totalRls   Int
+  status     String    @default("ISSUED") // ISSUED | PAID | CANCELLED
+  issuedAt   DateTime  @default(now())
+  note       String?
+  order      Order?    @relation(fields: [orderId], references: [id])
+
+  @@index([customerId])
+}
+
+// دفتر مشتری — amountRls علامت‌دار: بدهی (+) / کاهش بدهی (−)
+model CustomerLedger {
+  id          String    @id @default(cuid())
+  customerId  String
+  entryType   String    // INVOICE | RECEIPT | CREDIT_NOTE | ADJUST
+  amountRls   Int
+  refType     String?   // ORDER | INVOICE | RECEIPT | RETURN
+  refId       String?
+  description String?
+  userId      String?
+  createdAt   DateTime  @default(now())
+  customer    Customer  @relation(fields: [customerId], references: [id])
+
+  @@index([customerId, createdAt])
+}
+
+model SupplierLedger {
+  id          String    @id @default(cuid())
+  supplierId  String
+  entryType   String    // PURCHASE | PAYMENT | ADJUST
+  amountRls   Int       // بدهی ما به تأمین‌کننده (+) / پرداخت (−)
+  refType     String?
+  refId       String?
+  description String?
+  userId      String?
+  createdAt   DateTime  @default(now())
+  supplier    Supplier  @relation(fields: [supplierId], references: [id])
+
+  @@index([supplierId, createdAt])
+}
+
+model Receipt {
+  id         String   @id @default(cuid())
+  receiptNo  String   @unique
+  customerId String
+  amountRls  Int
+  method     String   @default("CASH") // CASH | TRANSFER | CHEQUE
+  refNo      String?
+  note       String?
+  userId     String
+  createdAt  DateTime @default(now())
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  @@index([customerId])
+}
+
+model Payment {
+  id         String    @id @default(cuid())
+  paymentNo  String    @unique
+  supplierId String?
+  category   String    @default("SUPPLIER") // SUPPLIER | EXPENSE | SALARY
+  amountRls  Int
+  method     String    @default("CASH")
+  refNo      String?
+  note       String?
+  userId     String
+  createdAt  DateTime  @default(now())
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  category    String
+  amountRls   Int
+  description String?
+  userId      String
+  createdAt   DateTime @default(now())
+}
+
+// ───────────────────────────── Returns ───────────────────────────────────────
+
+model ReturnRequest {
+  id               String    @id @default(cuid())
+  returnNo         String    @unique
+  orderId          String
+  customerId       String
+  status           String    @default("REQUESTED") // REQUESTED | REVIEWED | CLOSED
+  reason           String?
+  reviewedById     String?
+  reviewedAt       DateTime?
+  financialPosted  Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  order            Order     @relation(fields: [orderId], references: [id])
+  customer         Customer  @relation(fields: [customerId], references: [id])
+  items            ReturnItem[]
+
+  @@index([status])
+}
+
+model ReturnItem {
+  id              String  @id @default(cuid())
+  returnRequestId String
+  productId       String
+  product         Product @relation(fields: [productId], references: [id])
+  unitId          String?
+  qtyBase         Int
+  reason          String?
+  disposition     String  @default("PENDING") // PENDING | RESTOCK | SCRAP | QUARANTINE
+  qcNote          String?
+  request         ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────────── Workforce ─────────────────────────────────────
+
+model Visit {
+  id            String    @id @default(cuid())
+  visitorId     String
+  customerId    String
+  branchId      String?
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+  result        String?   // ORDERED | PAYMENT_COLLECTED | NO_ORDER | NOT_PRESENT
+  noOrderReason String?
+  note          String?
+  lat           Float?
+  lng           Float?
+  createdAt     DateTime  @default(now())
+  customer      Customer  @relation(fields: [customerId], references: [id])
+
+  @@index([visitorId, startedAt])
+}
+
+model Attendance {
+  id         String    @id @default(cuid())
+  userId     String
+  date       String    // YYYY-MM-DD
+  checkInAt  DateTime?
+  checkOutAt DateTime?
+  status     String    @default("PRESENT") // PRESENT | LEAVE | MISSION
+  note       String?
+
+  @@unique([userId, date])
+}
+
+model SaleTarget {
+  id        String   @id @default(cuid())
+  userId    String
+  periodYm  String   // e.g. 1404-09
+  amountRls Int
+  createdAt DateTime @default(now())
+
+  @@unique([userId, periodYm])
+}
+
+// ───────────────────────────── Messaging & Notifications ─────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String?
+  type      String   // ORDER_NEW | ORDER_CONFIRMED | LOW_STOCK | EXPIRY | DEBT | PAYMENT | RETURN | MESSAGE | SYSTEM
+  title     String
+  body      String?
+  refType   String?
+  refId     String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+}
+
+model Message {
+  id              String   @id @default(cuid())
+  senderUserId    String
+  recipientUserId String
+  body            String
+  isRead          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  sender          User     @relation("MessageSender", fields: [senderUserId], references: [id])
+  recipient       User     @relation("MessageRecipient", fields: [recipientUserId], references: [id])
+
+  @@index([senderUserId, recipientUserId])
+}
+
+// ───────────────────────────── Audit & Settings ──────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  beforeJson String?
+  afterJson  String?
+  ip         String?
+  result     String   @default("SUCCESS") // SUCCESS | DENIED | ERROR
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}

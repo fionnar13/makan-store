@@ -1,0 +1,18 @@
+services:
+  app:
+    build: .
+    container_name: bankehdari
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      # پوشه db کنار docker-compose.yml به داخل کانتینر mount می‌شود؛
+      # پس دیتابیس روی سیستم میزبان باقی می‌ماند و با بکاپ آن به‌سادگی می‌توانید کپی بگیرید.
+      DATABASE_URL: file:/app/db/custom.db
+      # اگر می‌خواهید «اولین Seed» با رمز دلخواه انجام شود، دو خط زیر را از کامنت خارج کنید:
+      # ADMIN_PASSWORD: "YourAdmin#Pass"
+      # DEMO_USERS_PASSWORD: "YourDemo#Pass"
+    volumes:
+      - ./db:/app/db
