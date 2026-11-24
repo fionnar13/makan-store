@@ -32,11 +32,11 @@ export async function POST(req: NextRequest) {
       return ok({ kind, avatarUrl })
     }
 
-    if (kind === 'logo' || kind === 'favicon') {
-      // هویت وب‌سایت — فقط مدیر کل / آدمین
+    if (kind === 'logo' || kind === 'favicon' || kind === 'banner') {
+      // هویت وب‌سایت و بنرهای فروشگاه — فقط مدیر کل / آدمین
       const user = await requirePerm(req, 'users.manage')
       if (!(file instanceof File)) throw new ApiError(400, 'NO_FILE', 'فایل تصویر ارسال نشده است')
-      const url = await saveUploadImage(file, 'site')
+      const url = await saveUploadImage(file, kind === 'banner' ? 'banners' : 'site')
       await audit({
         userId: user.id, action: 'site.image.upload', entityType: 'Setting', entityId: `site.${kind}Url`,
         after: { url },
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       return ok({ kind, url })
     }
 
-    throw new ApiError(400, 'BAD_KIND', 'نوع بارگذاری نامعتبر است (logo | favicon | avatar)')
+    throw new ApiError(400, 'BAD_KIND', 'نوع بارگذاری نامعتبر است (logo | favicon | banner | avatar)')
   })
 }
 

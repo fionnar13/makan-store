@@ -13,7 +13,8 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, RefreshCw, Lock, Pencil, Trash2, ArrowUpRight, ImagePlus, Globe, Loader2 } from 'lucide-react'
+import { Tags, BadgeCheck, Warehouse, Users, Images, Settings2 } from 'lucide-react'
+import { Plus, RefreshCw, Lock, Pencil, Trash2, ArrowUpRight, ImagePlus, Globe, Loader2, LayoutPanelTop, ChevronUp, ChevronDown, KeyRound } from 'lucide-react'
 import { toast } from 'sonner'
 
 type TableStat = { key: string; label: string; count: number; hint: string; view: string | null }
@@ -41,13 +42,15 @@ export default function AdminDataView({ user, go }: { user: SessionUserLike; go:
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex-wrap h-auto">
-          <TabsTrigger value="overview">نمای کلی</TabsTrigger>
-          <TabsTrigger value="categories">دسته‌بندی‌ها</TabsTrigger>
-          <TabsTrigger value="brands">برندها</TabsTrigger>
-          <TabsTrigger value="warehouses">انبارها</TabsTrigger>
-          <TabsTrigger value="employees">کارمندان</TabsTrigger>
-          <TabsTrigger value="site">وب‌سایت</TabsTrigger>
-          <TabsTrigger value="settings">تنظیمات</TabsTrigger>
+          <TabsTrigger value="overview" className="gap-1.5"><LayoutPanelTop className="h-3.5 w-3.5" /> نمای کلی</TabsTrigger>
+          <TabsTrigger value="categories" className="gap-1.5"><Tags className="h-3.5 w-3.5" /> دسته‌بندی‌ها</TabsTrigger>
+          <TabsTrigger value="brands" className="gap-1.5"><BadgeCheck className="h-3.5 w-3.5" /> برندها</TabsTrigger>
+          <TabsTrigger value="warehouses" className="gap-1.5"><Warehouse className="h-3.5 w-3.5" /> انبارها</TabsTrigger>
+          <TabsTrigger value="employees" className="gap-1.5"><Users className="h-3.5 w-3.5" /> کارمندان</TabsTrigger>
+          <TabsTrigger value="site" className="gap-1.5"><Globe className="h-3.5 w-3.5" /> وب‌سایت</TabsTrigger>
+          <TabsTrigger value="banners" className="gap-1.5"><Images className="h-3.5 w-3.5" /> بنرهای فروشگاه</TabsTrigger>
+          <TabsTrigger value="google" className="gap-1.5"><KeyRound className="h-3.5 w-3.5" /> ورود با گوگل</TabsTrigger>
+          <TabsTrigger value="settings" className="gap-1.5"><Settings2 className="h-3.5 w-3.5" /> تنظیمات</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -63,6 +66,8 @@ export default function AdminDataView({ user, go }: { user: SessionUserLike; go:
         <TabsContent value="warehouses" className="mt-4"><WarehousesTab /></TabsContent>
         <TabsContent value="employees" className="mt-4"><EmployeesTab /></TabsContent>
         <TabsContent value="site" className="mt-4"><SiteSettingsTab /></TabsContent>
+        <TabsContent value="banners" className="mt-4"><BannersTab /></TabsContent>
+        <TabsContent value="google" className="mt-4"><GoogleLoginTab /></TabsContent>
         <TabsContent value="settings" className="mt-4"><SettingsTab /></TabsContent>
       </Tabs>
     </div>
@@ -992,6 +997,378 @@ function SiteSettingsTab() {
           <p className="text-[11px] text-muted-foreground">
             پس از ذخیره، عنوان و آیکون تب مرورگر بلافاصله به‌روز می‌شود؛ در صورت ناپدید شدن تصویر، صفحه را یک‌بار بازخوانی کنید.
           </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── بنرهای فروشگاه (هیرو اسلایدشو) ───
+
+type BannerRow = {
+  id: string
+  title: string | null
+  subtitle: string | null
+  imageUrl: string
+  linkUrl: string | null
+  linkLabel: string | null
+  sortOrder: number
+  isActive: boolean
+  createdAt: string
+}
+
+function BannersTab() {
+  const { data, loading, reload } = useApiData<BannerRow[]>('/api/admin/banners')
+  const [editing, setEditing] = useState<BannerRow | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const banners = data ?? []
+
+  const toggleActive = async (b: BannerRow) => {
+    try {
+      await apiFetch(`/api/admin/banners/${b.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: !b.isActive }) })
+      toast.success(b.isActive ? 'بنر غیرفعال شد' : 'بنر فعال شد')
+      reload()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'خطا')
+    }
+  }
+
+  const move = async (b: BannerRow, dir: -1 | 1) => {
+    const sorted = [...banners].sort((x, y) => x.sortOrder - y.sortOrder || x.createdAt.localeCompare(y.createdAt))
+    const idx = sorted.findIndex(x => x.id === b.id)
+    const swapWith = sorted[idx + dir]
+    if (!swapWith) return
+    try {
+      // مبادله ترتیب با همسایه — دو درخواست PATCH
+      await Promise.all([
+        apiFetch(`/api/admin/banners/${b.id}`, { method: 'PATCH', body: JSON.stringify({ sortOrder: swapWith.sortOrder }) }),
+        apiFetch(`/api/admin/banners/${swapWith.id}`, { method: 'PATCH', body: JSON.stringify({ sortOrder: b.sortOrder }) }),
+      ])
+      reload()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'خطا در تغییر ترتیب')
+    }
+  }
+
+  const doDelete = async () => {
+    if (!deleteId) return
+    setBusy(true)
+    try {
+      await apiFetch(`/api/admin/banners/${deleteId}`, { method: 'DELETE' })
+      toast.success('بنر حذف شد')
+      setDeleteId(null)
+      reload()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'خطا در حذف')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <p className="text-xs text-muted-foreground">
+          بنرهای فعال در هیرو اسلایدشوِ صفحه «فروشگاه محصولات» نمایش داده می‌شوند (چرخش خودکار هر ۵ ثانیه). حداکثر ۵ مگابایت.
+        </p>
+        <Button size="sm" onClick={() => setAddOpen(true)}><Plus className="h-4 w-4 ml-1" /> بنر جدید</Button>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">در حال بارگذاری…</p>
+      ) : banners.length === 0 ? (
+        <div className="rounded-xl border bg-card py-12 text-center">
+          <Images className="h-9 w-9 text-stone-300 mx-auto" aria-hidden />
+          <p className="text-sm text-muted-foreground mt-3">هنوز بنری ثبت نشده — صفحه فروشگاه حالت پیش‌فرض را نشان می‌دهد</p>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {banners.map(b => (
+            <div key={b.id} className={`rounded-xl border bg-card overflow-hidden ${!b.isActive ? 'opacity-60' : ''}`}>
+              <div className="relative aspect-[16/7] bg-stone-100">
+                <img src={b.imageUrl} alt={b.title ?? 'بنر'} className="absolute inset-0 h-full w-full object-cover" />
+                {!b.isActive && (
+                  <span className="absolute top-2 left-2 rounded-full bg-rose-600 text-white text-[10px] font-bold px-2 py-1">غیرفعال</span>
+                )}
+              </div>
+              <div className="p-3 grid gap-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold truncate">{b.title ?? 'بدون عنوان'}</div>
+                    {b.subtitle && <div className="text-[11px] text-muted-foreground line-clamp-1">{b.subtitle}</div>}
+                  </div>
+                  <span className="text-[10px] text-muted-foreground shrink-0 rounded bg-stone-100 px-1.5 py-0.5" dir="ltr">#{b.sortOrder}</span>
+                </div>
+                {b.linkUrl && <div className="text-[10px] text-emerald-700 truncate" dir="ltr">{b.linkLabel ?? 'لینک'}: {b.linkUrl}</div>}
+                <div className="flex items-center gap-1.5 pt-1 border-t border-dashed">
+                  <Button variant="ghost" size="sm" className="h-7 px-1.5" aria-label="انتقال به بالا" onClick={() => move(b, -1)}><ChevronUp className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="sm" className="h-7 px-1.5" aria-label="انتقال به پایین" onClick={() => move(b, 1)}><ChevronDown className="h-4 w-4" /></Button>
+                  <Switch checked={b.isActive} onCheckedChange={() => toggleActive(b)} aria-label="فعال/غیرفعال" />
+                  <span className="mr-auto flex gap-1">
+                    <Button variant="ghost" size="sm" className="h-7" onClick={() => setEditing(b)}><Pencil className="h-3.5 w-3.5" /></Button>
+                    <Button variant="ghost" size="sm" className="h-7 text-rose-600 hover:text-rose-700" onClick={() => setDeleteId(b.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <BannerDialog open={!!editing || addOpen} banner={editing} isNew={addOpen} onClose={() => { setEditing(null); setAddOpen(false) }} onDone={reload} />
+      <ConfirmDelete
+        open={!!deleteId}
+        title="حذف بنر"
+        description="این بنر برای همیشه حذف می‌شود و در اسلایدشو فروشگاه نمایش داده نمی‌شود."
+        busy={busy}
+        onCancel={() => setDeleteId(null)}
+        onConfirm={doDelete}
+      />
+    </div>
+  )
+}
+
+function BannerDialog({ open, banner, isNew, onClose, onDone }: {
+  open: boolean
+  banner: BannerRow | null
+  isNew: boolean
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [title, setTitle] = useState('')
+  const [subtitle, setSubtitle] = useState('')
+  const [linkUrl, setLinkUrl] = useState('')
+  const [linkLabel, setLinkLabel] = useState('')
+  const [sortOrder, setSortOrder] = useState(0)
+  const [isActive, setIsActive] = useState(true)
+  const [imageUrl, setImageUrl] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [dirty, setDirty] = useState(false)
+  const fileInput = useRef<HTMLInputElement>(null)
+  const isEdit = !isNew && !!banner
+
+  useEffect(() => {
+    if (open) {
+      if (banner) {
+        setTitle(banner.title ?? ''); setSubtitle(banner.subtitle ?? '')
+        setLinkUrl(banner.linkUrl ?? ''); setLinkLabel(banner.linkLabel ?? '')
+        setSortOrder(banner.sortOrder); setIsActive(banner.isActive); setImageUrl(banner.imageUrl)
+      } else {
+        setTitle(''); setSubtitle(''); setLinkUrl(''); setLinkLabel('')
+        setSortOrder(0); setIsActive(true); setImageUrl('')
+      }
+      setDirty(false)
+    }
+  }, [open, banner])
+
+  const upload = async (file: File) => {
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('kind', 'banner')
+      form.append('file', file)
+      const res = await apiUpload<{ url: string }>('/api/uploads', form)
+      setImageUrl(res.url)
+      setDirty(true)
+      toast.success('تصویر بارگذاری شد')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'خطا در بارگذاری تصویر')
+    } finally { setUploading(false) }
+  }
+
+  const submit = async () => {
+    if (!imageUrl) { toast.error('ابتدا تصویر بنر را بارگذاری کنید'); return }
+    const payload: Record<string, unknown> = { title: title.trim() || null, subtitle: subtitle.trim() || null, linkUrl: linkUrl.trim() || null, linkLabel: linkLabel.trim() || null, isActive }
+    if (!isEdit) {
+      payload.imageUrl = imageUrl
+      payload.sortOrder = sortOrder
+    } else if (dirty) {
+      payload.imageUrl = imageUrl
+    }
+    setBusy(true)
+    try {
+      if (isEdit) {
+        await apiFetch(`/api/admin/banners/${banner!.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+        toast.success('بنر به‌روزرسانی شد')
+      } else {
+        await apiFetch('/api/admin/banners', { method: 'POST', body: JSON.stringify(payload) })
+        toast.success('بنر ایجاد شد')
+      }
+      onDone(); onClose()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'خطا')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-md max-h-[92vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? 'ویرایش بنر' : 'بنر جدید'}</DialogTitle>
+          <DialogDescription>تصویر بنر (حداکثر ۵ مگابایت — PNG/JPEG/WEBP) و متن اختیاری روی تصویر.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3">
+          {/* تصویر */}
+          <div className="grid gap-2">
+            <input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }} />
+            <div className="relative rounded-lg border overflow-hidden aspect-[16/7] bg-stone-50">
+              {imageUrl ? (
+                <img src={imageUrl} alt="پیش‌نمایش بنر" className="absolute inset-0 h-full w-full object-cover" />
+              ) : (
+                <div className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">تصویری بارگذاری نشده</div>
+              )}
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => fileInput.current?.click()} disabled={uploading}>
+              {uploading ? <Loader2 className="h-4 w-4 ml-1 animate-spin" /> : <ImagePlus className="h-4 w-4 ml-1" />}
+              {imageUrl ? 'تغییر تصویر' : 'بارگذاری تصویر'}
+            </Button>
+          </div>
+
+          <Field label="عنوان (روی تصویر)" hint="اختیاری — حداکثر ۸۰ کاراکتر">
+            <Input value={title} onChange={e => setTitle(e.target.value)} maxLength={80} placeholder="مثلاً: پیشنهاد ویژه ماه رمضان" />
+          </Field>
+          <Field label="زیرعنوان" hint="اختیاری — حداکثر ۱۶۰ کاراکتر">
+            <Textarea rows={2} value={subtitle} onChange={e => setSubtitle(e.target.value)} maxLength={160} />
+          </Field>
+          <div className="grid grid-cols-3 gap-2">
+            <Field label="متن دکمه" hint="اختیاری">
+              <Input value={linkLabel} onChange={e => setLinkLabel(e.target.value)} maxLength={40} placeholder="مشاهده" />
+            </Field>
+            <div className="col-span-2">
+              <Field label="لینک دکمه" hint="اختیاری — مسیر داخلی مثل #/catalog">
+                <Input dir="ltr" value={linkUrl} onChange={e => setLinkUrl(e.target.value)} maxLength={300} placeholder="#/catalog" />
+              </Field>
+            </div>
+          </div>
+          {!isEdit && (
+            <Field label="ترتیب نمایش" hint="عدد کوچک‌تر زودتر نمایش داده می‌شود">
+              <Input type="number" dir="ltr" min={0} max={9999} value={sortOrder} onChange={e => setSortOrder(Math.max(0, Number(e.target.value) || 0))} />
+            </Field>
+          )}
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <Switch checked={isActive} onCheckedChange={setIsActive} aria-label="فعال" />
+            فعال (در اسلایدشو نمایش داده شود)
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={onClose}>انصراف</Button>
+            <Button onClick={submit} disabled={busy || !imageUrl || (!dirty && isEdit)}>
+              {busy ? 'در حال ثبت…' : isEdit ? 'ذخیره' : 'ایجاد بنر'}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── ورود با گوگل ───
+
+type GoogleConfig = { enabled: boolean; clientId: string; secretSet: boolean; redirectUri: string; source: 'env' | 'db' }
+
+function GoogleLoginTab() {
+  const { data, loading, reload } = useApiData<GoogleConfig>('/api/admin/auth-google')
+  const [enabled, setEnabled] = useState(false)
+  const [clientId, setClientId] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [dirty, setDirty] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (data && !dirty) {
+      setEnabled(data.enabled)
+      setClientId(data.clientId)
+    }
+  }, [data, dirty])
+
+  const save = async () => {
+    setBusy(true)
+    try {
+      const payload: Record<string, unknown> = { enabled }
+      if (dirty && clientId !== data?.clientId) payload.clientId = clientId
+      if (clientSecret.trim()) payload.clientSecret = clientSecret.trim()
+      await apiFetch('/api/admin/auth-google', { method: 'PUT', body: JSON.stringify(payload) })
+      toast.success('تنظیمات ورود با گوگل ذخیره شد')
+      setClientSecret('')
+      setDirty(false)
+      reload()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'خطا در ذخیره تنظیمات')
+    } finally { setBusy(false) }
+  }
+
+  const copyRedirect = async () => {
+    if (!data?.redirectUri) return
+    try {
+      await navigator.clipboard.writeText(data.redirectUri)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { toast.error('کپی ناموفق بود؛ آدرس را دستی کپی کنید') }
+  }
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <div className="rounded-xl border bg-card p-4 grid gap-4">
+        <div className="flex items-center gap-2 border-b pb-3">
+          <KeyRound className="h-4 w-4 text-emerald-700" aria-hidden />
+          <span className="text-sm font-bold">فعال‌سازی ورود با گوگل</span>
+        </div>
+        {loading ? (
+          <p className="text-sm text-muted-foreground">در حال بارگذاری…</p>
+        ) : (
+          <>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <Switch checked={enabled} onCheckedChange={v => { setEnabled(v); setDirty(true) }} aria-label="ورود با گوگل" />
+              <span className="text-sm">
+                ورود کاربران با حساب گوگل
+                <span className="block text-[11px] text-muted-foreground mt-0.5">
+                  {enabled ? 'دکمه «ورود با گوگل» در صفحه ورود نمایش داده می‌شود.' : 'دکمه گوگل از صفحه ورود حذف می‌شود.'}
+                </span>
+              </span>
+            </label>
+
+            <Field label="Client ID" hint="از Google Cloud Console → Credentials → OAuth 2.0 Client ID">
+              <Input dir="ltr" value={clientId} onChange={e => { setClientId(e.target.value); setDirty(true) }} placeholder="xxxxxxxx.apps.googleusercontent.com" />
+            </Field>
+            <Field label="Client Secret" hint={data?.secretSet ? 'یک secret ثبت شده — برای تغییر مقدار جدید وارد کنید (خالی بماند تا تغییر نکند)' : 'Secret کلاینت OAuth گوگل'}>
+              <Input dir="ltr" type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} placeholder={data?.secretSet ? '•••••••• (ثبت شده)' : ''} />
+            </Field>
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-[11px] text-amber-900 leading-5">
+              URI بازگشت برای ثبت در گوگل (Authorized redirect URIs):
+              <div className="mt-1.5 flex items-center gap-2">
+                <code className="flex-1 min-w-0 rounded bg-white border px-2 py-1 text-[11px] overflow-x-auto" dir="ltr">{data?.redirectUri ?? '—'}</code>
+                <Button type="button" variant="outline" size="sm" className="h-7 shrink-0" onClick={copyRedirect}>{copied ? 'کپی شد' : 'کپی'}</Button>
+              </div>
+              {data?.source === 'env' && <p className="mt-2">شناسه و رمز از متغیرهای محیطی (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) خوانده می‌شود و مقادیر پنل نادیده گرفته می‌شوند.</p>}
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={save} disabled={busy || (!dirty && !clientSecret.trim())}>{busy ? 'در حال ذخیره…' : 'ذخیره تغییرات'}</Button>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="rounded-xl border bg-card p-4 grid gap-3 text-xs leading-6 text-muted-foreground">
+        <div className="flex items-center gap-2 border-b pb-3 text-sm font-bold text-stone-700">
+          <Globe className="h-4 w-4 text-emerald-700" aria-hidden />
+          راهنمای راه‌اندازی
+        </div>
+        <ol className="grid gap-2 list-decimal pr-5">
+          <li>در <span dir="ltr">console.cloud.google.com</span> یک پروژه بسازید و به «APIs & Services → Credentials» بروید.</li>
+          <li>«OAuth client ID» با نوع <span dir="ltr">Web application</span> بسازید و در بخش Authorized redirect URIs آدرس کپی‌شده بالا را ثبت کنید.</li>
+          <li>Client ID و Client Secret را در همین فرم وارد و ذخیره کنید (یا به‌جای آن متغیرهای محیطی <span dir="ltr">GOOGLE_CLIENT_ID</span> / <span dir="ltr">GOOGLE_CLIENT_SECRET</span> را تنظیم کنید).</li>
+          <li>کلید «ورود کاربران با حساب گوگل» را روشن کنید؛ دکمه گوگل فوراً در صفحه ورود ظاهر می‌شود.</li>
+        </ol>
+        <div className="rounded-lg bg-stone-50 border p-3 leading-6">
+          <span className="font-bold text-stone-700">کاربران جدید گوگل:</span>{' '}
+          با اولین ورود، حسابی با نقش پیش‌فرض «کاربر آنلاین» ساخته می‌شود که فقط داشبورد، فروشگاه و سفارش‌ها را می‌بیند؛
+          مدیر می‌تواند از تب «کاربران و نقش‌ها» نقش آن‌ها را تغییر دهد. ورود با شماره موبایل برای این حساب‌ها غیرفعال است (فقط ورود با گوگل).
+        </div>
+        <div className="rounded-lg bg-stone-50 border p-3 leading-6">
+          <span className="font-bold text-stone-700">خروج از حساب:</span>{' '}
+          روی آواتار در هدر → «خروج از حساب».
         </div>
       </div>
     </div>

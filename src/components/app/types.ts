@@ -2,7 +2,8 @@
 export type SessionUserLike = {
   id: string
   name: string
-  phone: string
+  phone: string | null
+  email?: string | null
   avatarUrl?: string | null
   roles?: string[]
   roleLabels?: string[]

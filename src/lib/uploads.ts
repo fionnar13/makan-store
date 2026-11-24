@@ -32,15 +32,23 @@ function detectExt(buf: Buffer, declaredExt: string): string | null {
   return null
 }
 
-export type UploadKind = 'site' | 'avatars'
+export type UploadKind = 'site' | 'avatars' | 'banners'
+
+// محدودیت حجم هر نوع — بنرهای هیرو تصویر بزرگ‌تر دارند (۵ مگابایت)
+const MAX_BYTES_BY_KIND: Record<UploadKind, number> = {
+  site: MAX_IMAGE_BYTES,
+  avatars: MAX_IMAGE_BYTES,
+  banners: 5 * 1024 * 1024,
+}
 
 // ذخیره تصویر و برگرداندن مسیر عمومی آن مثل /uploads/site/xxxx.png
 export async function saveUploadImage(file: File, kind: UploadKind): Promise<string> {
+  const maxBytes = MAX_BYTES_BY_KIND[kind] ?? MAX_IMAGE_BYTES
   if (!(file instanceof File) || file.size === 0) {
     throw new ApiError(400, 'EMPTY_FILE', 'فایلی انتخاب نشده است')
   }
-  if (file.size > MAX_IMAGE_BYTES) {
-    throw new ApiError(400, 'TOO_LARGE', 'حجم تصویر باید حداکثر ۲ مگابایت باشد')
+  if (file.size > maxBytes) {
+    throw new ApiError(400, 'TOO_LARGE', `حجم تصویر باید حداکثر ${Math.round(maxBytes / (1024 * 1024))} مگابایت باشد`)
   }
   const declaredExt = EXT_BY_MIME[file.type]
   if (!declaredExt) {

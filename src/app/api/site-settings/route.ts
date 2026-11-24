@@ -11,21 +11,38 @@ const KEYS = ['site.name', 'site.slogan', 'site.logoUrl', 'site.faviconUrl'] as 
 export const DEFAULT_SITE_NAME = 'بنکداری هوشمند'
 export const DEFAULT_SITE_SLOGAN = 'سامانه مدیریت B2B بنکداری مواد غذایی'
 
+export type SiteBanner = {
+  id: string
+  title: string | null
+  subtitle: string | null
+  imageUrl: string
+  linkUrl: string | null
+  linkLabel: string | null
+}
+
 export type SiteIdentity = {
   name: string
   slogan: string
   logoUrl: string | null
   faviconUrl: string | null
+  banners: SiteBanner[]
 }
 
 async function readIdentity(): Promise<SiteIdentity> {
   const rows = await db.setting.findMany({ where: { key: { in: [...KEYS] } } })
   const map = Object.fromEntries(rows.map(r => [r.key, r.value])) as Record<string, string>
+  // بنرهای فعال صفحه فروشگاه — عمومی و مرتب‌شده
+  const banners = await db.banner.findMany({
+    where: { isActive: true },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    select: { id: true, title: true, subtitle: true, imageUrl: true, linkUrl: true, linkLabel: true },
+  })
   return {
     name: map['site.name'] || DEFAULT_SITE_NAME,
     slogan: map['site.slogan'] || DEFAULT_SITE_SLOGAN,
     logoUrl: map['site.logoUrl'] || null,
     faviconUrl: map['site.faviconUrl'] || null,
+    banners,
   }
 }
 

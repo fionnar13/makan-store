@@ -4,9 +4,10 @@
 // امکانات: جستجو، فیلتر دسته‌بندی و برند (برندها وابسته به دسته‌بندی)، مرتب‌سازی،
 // کارت محصول با قیمت عمومی و موجودی زنده، مشاهده جزئیات و مقایسه تا ۴ محصول
 import { useMemo, useState } from 'react'
-import { ErrorState, Money, formatFaNumber, useApiData } from './kit'
+import { ErrorState, Money, formatFaNumber, useApiData, type SiteIdentity } from './kit'
 import { COMPARE_MAX, ProductTile, stockInfo, type StoreMeta } from './StoreShared'
 import CompareDialog from './StoreCompare'
+import StoreHero from './StoreHero'
 import type { ProductListItem } from './types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +25,9 @@ const COMPARE_HINT = 'حداکثر ۴ محصول هم‌زمان قابل مقا
 export default function StorefrontView() {
   const { data, loading, error, reload } = useApiData<ProductListItem[]>('/api/products')
   const { data: meta } = useApiData<StoreMeta>('/api/products?meta=1')
+  // بنرهای هیرو از تنظیمات وب‌سایت (مدیریت از پنل مدیریت → بنرهای فروشگاه)
+  const { data: site } = useApiData<SiteIdentity>('/api/site-settings')
+  const heroBanners = site?.banners ?? []
   const [q, setQ] = useState('')
   const [categoryId, setCategoryId] = useState<string | null>(null)
   const [brandId, setBrandId] = useState<string | null>(null)
@@ -96,37 +100,60 @@ export default function StorefrontView() {
 
   return (
     <div>
-      {/* بنر فروشگاهی */}
-      <div className="rounded-2xl overflow-hidden bg-gradient-to-l from-emerald-800 via-emerald-600 to-teal-500 text-white shadow-md mb-5">
-        <div className="p-5 md:p-6 flex flex-col md:flex-row md:items-center gap-4">
-          <div className="flex-1">
-            <div className="text-xl md:text-2xl font-black flex items-center gap-2.5">
-              <span className="grid place-items-center h-10 w-10 rounded-xl bg-white/15" aria-hidden><Store className="h-5 w-5" /></span>
-              فروشگاه محصولات
+      {/* هیرو اسلایدشو با بنرهای مدیر — در نبود بنر، بنر پیش‌فرض گرادیانی */}
+      {heroBanners.length > 0 ? (
+        <StoreHero slides={heroBanners} />
+      ) : (
+        <div className="rounded-2xl overflow-hidden bg-gradient-to-l from-emerald-800 via-emerald-600 to-teal-500 text-white shadow-md mb-5">
+          <div className="p-5 md:p-6 flex flex-col md:flex-row md:items-center gap-4">
+            <div className="flex-1">
+              <div className="text-xl md:text-2xl font-black flex items-center gap-2.5">
+                <span className="grid place-items-center h-10 w-10 rounded-xl bg-white/15" aria-hidden><Store className="h-5 w-5" /></span>
+                فروشگاه محصولات
+              </div>
+              <p className="text-xs md:text-sm text-white/80 mt-2 leading-6 max-w-2xl">
+                همان کاتالوگی که ویزیتور به مشتری نشان می‌دهد — با قیمت عمومی، موجودی زنده و امکان مقایسه؛
+                مدیر سیستم و آدمین نیز همین نما را می‌بینند
+              </p>
             </div>
-            <p className="text-xs md:text-sm text-white/80 mt-2 leading-6 max-w-2xl">
-              همان کاتالوگی که ویزیتور به مشتری نشان می‌دهد — با قیمت عمومی، موجودی زنده و امکان مقایسه؛
-              مدیر سیستم و آدمین نیز همین نما را می‌بینند
-            </p>
+            <div className="relative w-full md:w-80">
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" aria-hidden />
+              <Input
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                placeholder="جستجوی نام، برند یا SKU…"
+                aria-label="جستجوی محصول"
+                className="bg-white/95 text-stone-800 border-0 pr-9 placeholder:text-stone-400"
+              />
+            </div>
+            <Button
+              variant="outline" size="sm" onClick={reload}
+              className="bg-white/10 border-white/30 text-white hover:bg-white/20 hover:text-white shrink-0"
+            >
+              <RefreshCw className="h-4 w-4 ml-1" /> به‌روزرسانی
+            </Button>
           </div>
-          <div className="relative w-full md:w-80">
+        </div>
+      )}
+
+      {/* نوار جستجو و به‌روزرسانی — فقط در حالت اسلایدشو (در بنر پیش‌فرض داخل همان است) */}
+      {heroBanners.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-2 mb-4">
+          <div className="relative flex-1">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" aria-hidden />
             <Input
               value={q}
               onChange={e => setQ(e.target.value)}
               placeholder="جستجوی نام، برند یا SKU…"
               aria-label="جستجوی محصول"
-              className="bg-white/95 text-stone-800 border-0 pr-9 placeholder:text-stone-400"
+              className="bg-card pr-9 placeholder:text-stone-400"
             />
           </div>
-          <Button
-            variant="outline" size="sm" onClick={reload}
-            className="bg-white/10 border-white/30 text-white hover:bg-white/20 hover:text-white shrink-0"
-          >
+          <Button variant="outline" size="sm" onClick={reload} className="shrink-0">
             <RefreshCw className="h-4 w-4 ml-1" /> به‌روزرسانی
           </Button>
         </div>
-      </div>
+      )}
 
       {/* فیلتر دسته‌بندی‌ها */}
       <div className="flex flex-wrap items-center gap-1.5 mb-2" role="group" aria-label="فیلتر دسته‌بندی">

@@ -9,12 +9,22 @@ import { formatFaNumber, formatToman, jalaliDate, jalaliDateTime, ORDER_STATUS_L
 
 export { formatFaNumber, formatToman, jalaliDate, jalaliDateTime, ORDER_STATUS_LABELS, STATUS_BADGE_CLASS }
 
-// هویت وب‌سایت (تنظیم از پنل مدیریت → تب «وب‌سایت»)
+// هویت وب‌سایت (تنظیم از پنل مدیریت → تب «وب‌سایت») + بنرهای هیرو فروشگاه
+export type SiteBanner = {
+  id: string
+  title: string | null
+  subtitle: string | null
+  imageUrl: string
+  linkUrl: string | null
+  linkLabel: string | null
+}
+
 export type SiteIdentity = {
   name: string
   slogan: string
   logoUrl: string | null
   faviconUrl: string | null
+  banners?: SiteBanner[]
 }
 
 // رویداد اطلاع‌رسانی تغییر هویت سایت — هدر/تب مرورگر بلافاصله به‌روز می‌شوند

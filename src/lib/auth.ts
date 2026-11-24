@@ -61,7 +61,8 @@ function sha256(v: string): string {
 
 export type SessionUser = {
   id: string
-  phone: string
+  phone: string | null
+  email: string | null
   name: string
   avatarUrl: string | null
   roles: string[]
@@ -113,6 +114,7 @@ export async function getSessionUser(req: NextRequest): Promise<SessionUser | nu
   return {
     id: u.id,
     phone: u.phone,
+    email: u.email,
     name: u.name,
     avatarUrl: u.avatarUrl,
     roles: u.roles.map(ur => ur.role.name),

@@ -37,7 +37,8 @@ import ProfileAvatarDialog from './ProfileAvatarDialog'
 
 export type SessionUser = {
   id: string
-  phone: string
+  phone: string | null
+  email: string | null
   name: string
   avatarUrl: string | null
   roles: string[]
@@ -50,44 +51,60 @@ export type ViewKey =
   | 'finance' | 'returns' | 'visits' | 'reports' | 'messages' | 'users'
   | 'territories' | 'audit' | 'visitor' | 'admin-data'
 
-type NavItem = { key: ViewKey; label: string; icon: typeof Bell; perm?: string; roles?: string[] }
+type NavItem = { key: ViewKey; label: string; icon: typeof Bell; perm?: string; roles?: string[]; tone?: keyof typeof ICON_TONE }
+
+// رنگ اختصاصی هر آیتم سایدبار — پس‌زمینه ملایم پشت آیکون هر ایتم
+const ICON_TONE = {
+  emerald: 'bg-emerald-500/15 text-emerald-400',
+  amber: 'bg-amber-500/15 text-amber-400',
+  sky: 'bg-sky-500/15 text-sky-400',
+  rose: 'bg-rose-500/15 text-rose-400',
+  violet: 'bg-violet-500/15 text-violet-400',
+  teal: 'bg-teal-500/15 text-teal-400',
+  indigo: 'bg-indigo-500/15 text-indigo-400',
+  cyan: 'bg-cyan-500/15 text-cyan-400',
+  lime: 'bg-lime-500/15 text-lime-400',
+  fuchsia: 'bg-fuchsia-500/15 text-fuchsia-400',
+  orange: 'bg-orange-500/15 text-orange-400',
+  stone: 'bg-white/10 text-stone-300',
+} as const
 
 const NAV: Array<{ group: string; items: NavItem[] }> = [
   {
     group: 'عملیات روزانه',
     items: [
-      { key: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, perm: 'dashboard.view' },
-      { key: 'visitor', label: 'اپ ویزیتور', icon: Smartphone, roles: ['VISITOR'] },
-      { key: 'orders', label: 'سفارش‌ها', icon: ClipboardList, perm: 'orders.view' },
-      { key: 'visits', label: 'بازدیدها و حضور', icon: Map, perm: 'visits.view' },
-      { key: 'returns', label: 'مرجوعی کالا', icon: RotateCcw, perm: 'returns.view' },
+      { key: 'dashboard', label: 'داشبورد', icon: LayoutDashboard, perm: 'dashboard.view', tone: 'emerald' },
+      { key: 'visitor', label: 'اپ ویزیتور', icon: Smartphone, roles: ['VISITOR'], tone: 'orange' },
+      { key: 'orders', label: 'سفارش‌ها', icon: ClipboardList, perm: 'orders.view', tone: 'sky' },
+      { key: 'visits', label: 'بازدیدها و حضور', icon: Map, perm: 'visits.view', tone: 'teal' },
+      { key: 'returns', label: 'مرجوعی کالا', icon: RotateCcw, perm: 'returns.view', tone: 'rose' },
     ],
   },
   {
     group: 'پایه و کاتالوگ',
     items: [
-      { key: 'storefront', label: 'فروشگاه محصولات', icon: Store, perm: 'products.view' },
-      { key: 'customers', label: 'مشتریان', icon: Building2, perm: 'customers.view' },
-      { key: 'catalog', label: 'کاتالوگ محصولات', icon: Package, perm: 'products.view' },
-      { key: 'inventory', label: 'انبار و موجودی', icon: Warehouse, perm: 'inventory.view' },
-      { key: 'suppliers', label: 'تأمین‌کنندگان', icon: Truck, perm: 'suppliers.view' },
-      { key: 'territories', label: 'مناطق فروش', icon: Map, perm: 'customers.view' },
+      { key: 'storefront', label: 'فروشگاه محصولات', icon: Store, perm: 'products.view', tone: 'amber' },
+      { key: 'customers', label: 'مشتریان', icon: Building2, perm: 'customers.view', tone: 'violet' },
+      { key: 'catalog', label: 'کاتالوگ محصولات', icon: Package, perm: 'products.view', tone: 'indigo' },
+      { key: 'inventory', label: 'انبار و موجودی', icon: Warehouse, perm: 'inventory.view', tone: 'cyan' },
+      { key: 'suppliers', label: 'تأمین‌کنندگان', icon: Truck, perm: 'suppliers.view', tone: 'lime' },
+      { key: 'territories', label: 'مناطق فروش', icon: Map, perm: 'customers.view', tone: 'teal' },
     ],
   },
   {
     group: 'مالی و تحلیل',
     items: [
-      { key: 'finance', label: 'مالی و حساب‌ها', icon: Receipt, perm: 'finance.view' },
-      { key: 'reports', label: 'گزارش‌ها', icon: BarChart3, perm: 'reports.view' },
+      { key: 'finance', label: 'مالی و حساب‌ها', icon: Receipt, perm: 'finance.view', tone: 'emerald' },
+      { key: 'reports', label: 'گزارش‌ها', icon: BarChart3, perm: 'reports.view', tone: 'fuchsia' },
     ],
   },
   {
     group: 'سیستم',
     items: [
-      { key: 'messages', label: 'پیام‌ها', icon: MessageSquare, perm: 'messages.use' },
-      { key: 'admin-data', label: 'پنل مدیریت داده‌ها', icon: Database, perm: 'users.manage' },
-      { key: 'users', label: 'کاربران و نقش‌ها', icon: UserCog, perm: 'users.manage' },
-      { key: 'audit', label: 'سوابق سیستم', icon: FileClock, perm: 'audit.view' },
+      { key: 'messages', label: 'پیام‌ها', icon: MessageSquare, perm: 'messages.use', tone: 'sky' },
+      { key: 'admin-data', label: 'پنل مدیریت داده‌ها', icon: Database, perm: 'users.manage', tone: 'amber' },
+      { key: 'users', label: 'کاربران و نقش‌ها', icon: UserCog, perm: 'users.manage', tone: 'violet' },
+      { key: 'audit', label: 'سوابق سیستم', icon: FileClock, perm: 'audit.view', tone: 'stone' },
     ],
   },
 ]
@@ -414,7 +431,7 @@ export default function App() {
                 <UserAvatar name={user.name} avatarUrl={user.avatarUrl} size="h-10 w-10 text-base" />
                 <div className="min-w-0">
                   <div className="font-bold truncate">{user.name}</div>
-                  <div className="text-xs text-muted-foreground font-normal mt-0.5" dir="ltr">{user.phone}</div>
+                  <div className="text-xs text-muted-foreground font-normal mt-0.5" dir="ltr">{user.phone ?? user.email ?? '—'}</div>
                 </div>
               </div>
               <div className="flex flex-wrap gap-1 mt-2">
@@ -521,12 +538,23 @@ function SidebarNav({ user, nav, view, go }: { user: SessionUser; nav: Array<{ g
                   key={it.key}
                   onClick={() => go(it.key)}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex items-center gap-2.5 rounded-lg px-2.5 h-9 text-sm transition-colors ${
+                  title={it.label}
+                  className={`group flex items-center gap-2.5 rounded-lg px-2 h-10 text-sm transition-colors ${
                     active ? 'bg-primary text-primary-foreground font-medium' : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground'
                   }`}
                 >
-                  <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                  <span>{it.label}</span>
+                  {/* آیکون هر ایتم در قاب رنگی اختصاصی */}
+                  <span
+                    aria-hidden
+                    className={`grid place-items-center h-7 w-7 rounded-lg shrink-0 transition-colors ${
+                      active
+                        ? 'bg-white/20 text-white'
+                        : (ICON_TONE[it.tone ?? 'stone'] ?? ICON_TONE.stone) + ' group-hover:bg-sidebar-accent'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="truncate">{it.label}</span>
                 </button>
               )
             })}

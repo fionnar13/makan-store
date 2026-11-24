@@ -14,7 +14,7 @@ import { Plus, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 
 type UserRow = {
-  id: string; phone: string; name: string; isActive: boolean
+  id: string; phone: string | null; email: string | null; name: string; isActive: boolean
   phoneVerified: boolean; lastLoginAt: string | null; createdAt: string
   avatarUrl: string | null
   roles: Array<{ name: string; label: string }>; isSelf: boolean
@@ -73,7 +73,7 @@ export default function UsersView({ user }: { user: SessionUserLike }) {
                   key: 'name', header: 'کاربر', cell: (u: UserRow) => (
                     <div>
                       <div className="text-sm font-medium">{u.name} {u.isSelf && <Badge variant="outline" className="text-[9px]">شما</Badge>}</div>
-                      <div className="text-[11px] text-muted-foreground" dir="ltr">{u.phone}</div>
+                      <div className="text-[11px] text-muted-foreground" dir="ltr">{u.phone ?? u.email ?? '—'}</div>
                     </div>
                   ),
                 },
@@ -147,7 +147,7 @@ function UserDialog({ open, onOpenChange, onDone, rolesData, editUser, onEditClo
 
   useEffect(() => {
     if (editUser) {
-      setForm({ phone: editUser.phone, name: editUser.name, password: '', roleNames: editUser.roles.map(r => r.name) })
+      setForm({ phone: editUser.phone ?? '', name: editUser.name, password: '', roleNames: editUser.roles.map(r => r.name) })
     }
   }, [editUser])
 
@@ -204,7 +204,7 @@ function UserDialog({ open, onOpenChange, onDone, rolesData, editUser, onEditClo
           <DialogDescription>{isEdit ? 'برای تغییر رمز، فیلد رمز را پر کنید؛ در غیر این صورت خالی بگذارید.' : 'رمز عبور حداقل ۶ کاراکتر؛ پس از ایجاد، کاربر می‌تواند ورود کند.'}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
-          <Field label="شماره موبایل" required={isEdit}>
+          <Field label="شماره موبایل" hint="برای کاربران ورود با گوگل خالی است">
             <Input dir="ltr" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} disabled={isEdit} />
           </Field>
           <Field label="نام" required><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field>

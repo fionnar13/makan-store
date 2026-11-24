@@ -21,9 +21,11 @@ datasource db {
 
 model User {
   id            String    @id @default(cuid())
-  phone         String    @unique
+  phone         String?   @unique // برای کاربران عادی شماره موبایل؛ برای کاربران گوگل null
+  email         String?   @unique // ایمیل — برای کاربران ورود با گوگل
+  googleId      String?   @unique // شناسه یکتا از گوگل (sub)
   name          String
-  passwordHash  String
+  passwordHash  String    // برای کاربران گوگل مقدار تصادفی غیرقابل‌حدس (ورود با رمز غیرفعال)
   avatarUrl     String?   // تصویر پروفایل کاربر (مسیر فایل در public/uploads/avatars)
   isActive      Boolean   @default(true)
   phoneVerified Boolean   @default(false)
@@ -629,4 +631,20 @@ model Setting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+// بنرهای هیرو اسلایدشو صفحه فروشگاه — مدیریت از پنل مدیریت → تب «بنرهای فروشگاه»
+model Banner {
+  id        String   @id @default(cuid())
+  title     String?
+  subtitle  String?
+  imageUrl  String   // مسیر عمومی تصویر مثل /uploads/banners/xxxx.jpg
+  linkUrl   String?  // لینک اختیاری دکمه CTA
+  linkLabel String?  // متن دکمه CTA
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
 }

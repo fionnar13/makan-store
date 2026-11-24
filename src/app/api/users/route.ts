@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: 'asc' },
     })
     return ok(users.map(u => ({
-      id: u.id, phone: u.phone, name: u.name, isActive: u.isActive,
+      id: u.id, phone: u.phone, email: u.email, name: u.name, isActive: u.isActive,
       phoneVerified: u.phoneVerified, lastLoginAt: u.lastLoginAt, createdAt: u.createdAt,
       avatarUrl: u.avatarUrl,
       roles: u.roles.map(r => ({ name: r.role.name, label: r.role.label })),

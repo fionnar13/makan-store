@@ -78,6 +78,8 @@ const ROLE_PERMS: Record<string, string[]> = {
   DISPATCHER: ['dashboard.view','orders.view','inventory.view','inventory.issue','deliveries.manage','visits.view','messages.use'],
   DRIVER: ['orders.view','messages.use'],
   SUPPORT: ['dashboard.view','customers.view','orders.view','products.view','messages.use','visits.view'],
+  // کاربرانی که با حساب گوگل وارد می‌شوند — حداقل دسترسی: داشبورد، فروشگاه و سفارش‌ها
+  ONLINE_USER: ['dashboard.view','products.view','orders.view','messages.use'],
 }
 
 const ROLES: Array<[string, string]> = [
@@ -91,6 +93,7 @@ const ROLES: Array<[string, string]> = [
   ['DISPATCHER', 'مسئول ارسال'],
   ['DRIVER', 'راننده'],
   ['SUPPORT', 'کاربر پشتیبانی'],
+  ['ONLINE_USER', 'کاربر آنلاین (ورود با گوگل)'],
 ]
 
 // ─── کاتالوگ نمونه (۱۶ محصول با تصویر واقعی) — همه با پرچم DEMO_SEED ───
