@@ -97,8 +97,10 @@ export async function GET() {
   })
 }
 
+// nullish — کلاینت وقتی پس‌زمینه‌ای الصاق نشده باشد bgUrl را null می‌فرستد و باید پذیرفته شود
 const bgUrlField = z.string().max(300)
   .refine(v => v === '' || v.startsWith('/uploads/login/'), 'نشانی پس‌زمینه نامعتبر است')
+  .nullish()
 
 const sideSchema = z.object({
   bgKind: z.enum(['none', 'image', 'video']).optional(),
@@ -139,7 +141,7 @@ export async function PUT(req: NextRequest) {
     const s = body.side
     if (s) {
       if (s.bgKind !== undefined) updates.push({ key: 'login.side.bgKind', value: s.bgKind === 'none' ? '' : s.bgKind })
-      if (s.bgUrl !== undefined) updates.push({ key: 'login.side.bgUrl', value: s.bgUrl })
+      if (s.bgUrl !== undefined) updates.push({ key: 'login.side.bgUrl', value: s.bgUrl ?? '' })
       if (s.overlay !== undefined) updates.push({ key: 'login.side.overlay', value: String(s.overlay) })
       if (s.title !== undefined) updates.push({ key: 'login.side.title', value: s.title })
       if (s.subtitle !== undefined) updates.push({ key: 'login.side.subtitle', value: s.subtitle })
@@ -150,7 +152,7 @@ export async function PUT(req: NextRequest) {
     const f = body.form
     if (f) {
       if (f.bgKind !== undefined) updates.push({ key: 'login.form.bgKind', value: f.bgKind === 'none' ? '' : f.bgKind })
-      if (f.bgUrl !== undefined) updates.push({ key: 'login.form.bgUrl', value: f.bgUrl })
+      if (f.bgUrl !== undefined) updates.push({ key: 'login.form.bgUrl', value: f.bgUrl ?? '' })
       if (f.color !== undefined) updates.push({ key: 'login.form.color', value: f.color.toLowerCase() })
       if (f.transparency !== undefined) updates.push({ key: 'login.form.transparency', value: String(f.transparency) })
       if (f.blur !== undefined) updates.push({ key: 'login.form.blur', value: String(f.blur) })

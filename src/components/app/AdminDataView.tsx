@@ -1502,8 +1502,9 @@ function LoginSettingsTab() {
       await apiFetch('/api/login-settings', {
         method: 'PUT',
         body: JSON.stringify({
-          side: { ...side, items: itemsText.split('\n').map(x => x.trim()).filter(Boolean) },
-          form,
+          // bgUrl خالی به‌جای null — سرور فقط رشته می‌پذیرد
+          side: { ...side, bgUrl: side.bgUrl ?? '', items: itemsText.split('\n').map(x => x.trim()).filter(Boolean) },
+          form: { ...form, bgUrl: form.bgUrl ?? '' },
         }),
       })
       toast.success('تنظیمات صفحه ورود ذخیره شد')
